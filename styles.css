@@ -1,0 +1,184 @@
+/* MDC Integration Plugin Styles */
+
+/* Settings tabs */
+.mdc-settings-tabs {
+  display: flex;
+  gap: 5px;
+  margin-bottom: 1rem;
+  border-bottom: 1px solid var(--background-modifier-border);
+}
+
+.mdc-settings-tab {
+  padding: 0.5rem 1rem;
+  border: none;
+  background: none;
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  color: var(--text-muted);
+  font-size: 0.9em;
+}
+
+.mdc-settings-tab:hover {
+  color: var(--text-normal);
+}
+
+.mdc-settings-tab.active {
+  border-bottom: 2px solid var(--interactive-accent) !important;
+  color: var(--text-normal);
+  font-weight: bold;
+}
+
+.mdc-settings-tab-content {
+  padding: 1rem 0;
+}
+
+/* Environment variables */
+.mdc-env-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 1rem 0;
+}
+
+.mdc-env-table th,
+.mdc-env-table td {
+  padding: 0.5rem;
+  text-align: left;
+  border-bottom: 1px solid var(--background-modifier-border);
+}
+
+.mdc-env-table th {
+  font-weight: bold;
+  color: var(--text-normal);
+}
+
+.mdc-delete-env-var {
+  border: none;
+  background: none;
+  cursor: pointer;
+  color: var(--text-error);
+  padding: 0.25rem;
+  border-radius: 4px;
+}
+
+.mdc-delete-env-var:hover {
+  background-color: var(--background-modifier-error-hover);
+}
+
+.mdc-env-empty-message {
+  color: var(--text-muted);
+  font-style: italic;
+  margin: 1rem 0;
+}
+
+.mdc-new-env-container {
+  margin: 1rem 0;
+}
+
+/* Input group within the new environment variable container */
+.mdc-new-env-container > div:first-of-type { /* Targets the div holding the name and value inputs */
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+.mdc-new-env-container > div:first-of-type > input[type="text"]:nth-child(1) { /* Targets the name input field */
+  flex-grow: 1;
+}
+
+.mdc-new-env-container > div:first-of-type > input[type="text"]:nth-child(2) { /* Targets the value input field */
+  flex-grow: 2;
+}
+
+.mdc-env-presets {
+  margin-top: 2rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--background-modifier-border);
+}
+
+/* Prompt settings */
+.mdc-advanced-prompt-settings {
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 4px;
+  padding: 0.5rem;
+  margin-top: 0.5rem;
+}
+
+/* Settings helpers */
+.setting-item-advanced {
+  margin-left: 1.5rem;
+}
+
+/* Modal styles */
+.mdc-button-container {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 1rem;
+}
+
+.button-container {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 20px;
+  gap: 10px;
+}
+
+.mdc-selected-file {
+  margin: 1em 0;
+  padding: 0.5em;
+  background-color: var(--background-secondary);
+  border-radius: 4px;
+  word-break: break-all;
+}
+
+input[type="file"] {
+  margin: 15px 0;
+  width: 100%;
+}
+
+/* Conversion progress */
+.mdc-progress {
+  background-color: var(--background-primary);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 4px;
+  padding: 1em;
+  margin-top: 1em;
+  max-height: 200px;
+  overflow-y: auto;
+  font-family: var(--font-monospace);
+  font-size: 0.9em;
+}
+
+.mdc-progress-bar {
+  height: 8px;
+  background-color: var(--background-modifier-border);
+  border-radius: 4px;
+  margin-top: 0.5em;
+  overflow: hidden;
+}
+
+.mdc-progress-bar-inner {
+  height: 100%;
+  background-color: var(--interactive-accent);
+  width: 0%;
+  transition: width 0.3s;
+}
+
+/* Status messages */
+.mdc-status {
+  margin-top: 15px;
+  padding: 10px;
+  border-radius: 4px;
+}
+
+.mdc-status-success {
+  background-color: var(--background-modifier-success);
+}
+
+.mdc-status-error {
+  background-color: var(--background-modifier-error);
+}
+
+.mdc-status-info {
+  background-color: var(--background-modifier-info);
+}

@@ -1,0 +1,10 @@
+{
+	"id": "mdc",
+	"name": "Markdown Documentation Converter - MDC",
+	"version": "1.1.0",
+	"minAppVersion": "0.15.0",
+	"description": "Convert All document types (PPTX, PPT, PPSX, PDF, DOC, DOCX) to structured MD Markdown using AI through CLI.",
+	"author": "dralkh",
+	"authorUrl": "https://github.com/dralkh",
+	"isDesktopOnly": true
+}

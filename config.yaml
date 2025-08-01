@@ -1,0 +1,158 @@
+openrouter_model:
+  name: "mistralai/mistral-small-3.1-24b-instruct"  # Default or desired model name
+
+openai_model:
+  name: "gpt-4.1-mini"  # Default OpenAI model
+
+ollama_model:
+  name: "gemma3:12b"  # Model for all Ollama operations (image extraction and text processing)
+
+together_model:
+  name: "meta-llama/Llama-4-Maverick-17B-128E-Instruct-FP8" # Default Together AI model
+
+gemini_model:
+  name: "gemini-2.5-flash-preview-04-17" # Default Gemini model, vision capable
+
+prompts:
+  extract_text_from_image:
+    prompt: |
+      Please extract all visible text from the provided document image and format it into Markdown.
+      Follow these guidelines strictly:
+
+      1. **Headings**:
+        - If a title is present, format it using `#####` (e.g., `##### Title`).
+
+      2. **Text Styling**:
+        - Use bullet points and numbered lists where applicable.
+        - Use `**bold**` for text that should appear blue.
+        - Use `*italics*` for text that should appear green.
+        - Use `***bold/italics***` for text that should appear red.
+
+      3. **Markdown Syntax**:
+        - Do not use code blocks.
+
+      4. **General Instructions**:
+        - Maintain the original structure and hierarchy of the text as it appears in the image.
+        - Ensure that all extracted text is accurately represented.
+
+    parameters:
+      temperature: 0.1
+      top_p: 0.95
+      frequency_penalty: 0
+      presence_penalty: 0
+      repetition_penalty: 1
+      top_k: 0
+      max_tokens: 2048
+
+  extract_markdown_from_text:
+    prompt: |
+      Convert the provided content into a detailed, hierarchical Markdown format optimized for Obsidian. 
+      Ensure that every element—including text, images, diagrams, and footnotes—is accurately represented and organized. 
+      Follow these guidelines strictly:
+
+      ### 1. Content Integrity
+      - **Preservation and Text Formatting**:
+        - Maintain the original structure and hierarchy of the source content for accuracy.
+        - Use `**bold**`, `*italics*`, and `***bold/italics***` to emphasize key points as appropriate.
+
+      - **Referenced Attachments**:
+        - Place image references side by side using the format `![[example-ps1-1.webp]]` side by side if found within first page as such ![[example-ps1-1.webp]]![[example-ps1-2.webp]].
+
+      - **Lists and Tables**:
+        - Preserve the original structure of lists, tables, and other formatted elements from the source content.
+
+      - **Consistency**:
+        - Maintain consistent formatting throughout the document for a professional and cohesive appearance.
+
+      ### 2. Completeness and Accuracy
+      - **Comprehensive Inclusion**:
+        - Ensure that all relevant content from the source—whether text, images, diagrams, or footnotes—is included in the Markdown output.
+
+      - **Accuracy**:
+        - Verify that the hierarchy, formatting, and linking accurately represent the original content without omissions or distortions.
+
+      ### 3. Headings Hierarchy
+      - **Levels**:
+        - Major Topic: `#`
+        - Main Categories: `##`
+        - Subcategories: `###`
+        - Sub-Subcategories: `####`
+        - Continue up to `######` for deeper levels as necessary.
+
+      - **Best Practices**:
+        - **Avoid Overuse**: Introduce a new heading level only when there's a meaningful division in content.
+        - **Aesthetic Structure**: Ensure the hierarchy is logical and visually pleasing to facilitate easy navigation.
+
+      - **Avoid Overuse**:
+        - Refrain from using `---` separators for minor divisions or within closely related content sections.
+    parameters:
+      temperature: 0.1
+      top_p: 0.95
+      frequency_penalty: 0
+      presence_penalty: 0
+      repetition_penalty: 1
+      top_k: 0
+      max_tokens: 8192
+
+  extract_toc_from_markdown:
+    prompt:  |
+      Create a comprehensive and organized Table of Contents (TOC) for the topic "{base_filename}" based on the provided Markdown headings.
+
+      **Required TOC Format:**
+      ## Table of Contents
+      - Main Heading 1
+        - Subheading 1.1
+        - Subheading 1.2
+      - Main Heading 2
+        - Subheading 2.1
+        - Subheading 2.2
+          - Sub-subheading 2.2.1
+
+      **Critical Formatting Rules:**
+      1. **Exact Text Matching**: Use the EXACT same text as provided in the headings - do not modify, rephrase, or normalize the text in any way
+      2. **Hierarchy**: Use 2 spaces per indentation level for subheadings
+      3. **Bullet Points**: Use hyphens (-) for all bullet points, no asterisks (*) or plus signs (+)
+      4. **No Extra Text**: Do not add any explanatory text, word counts, or additional formatting
+      5. **Case Sensitivity**: Preserve original case exactly as provided
+      6. **Special Characters**: Include all special characters, numbers, and punctuation exactly as in the original headings
+
+      **Structure Guidelines:**
+      1. Start with `## Table of Contents` header
+      2. Create a hierarchical bullet list that mirrors the logical structure
+      3. Each indentation level represents one level deeper in the hierarchy
+      4. Only include headings that have meaningful content (skip empty sections)
+
+      **Example with Heart Content:**
+      ## Table of Contents
+      - THE HEART OF THE MATTER
+        - Structure and Function of the Heart
+          - 5 INTERESTING FACTS ABOUT THE HEART
+          - Functions of the Heart
+          - ANATOMY OF THE HEART
+          - Four Chambers of the Heart
+          - Heart Structures
+            - ATRIA
+            - SEPTUM
+            - VENTRICLES
+          - Valves
+          - Flow of Blood
+            - Step 1
+            - Step 2
+          - Flow of Blood in Action
+
+      **Input Headings to process:**
+      {extracted_headings_text}
+    parameters:
+      temperature: 0.3
+      top_p: 0.95
+      frequency_penalty: 0
+      presence_penalty: 0
+      repetition_penalty: 1
+      top_k: 0
+      max_tokens: 4192
+
+pdf_processing:
+  identical_image_threshold: 4 # Default: discard if more than 3 identical images are found
+
+processing_settings:
+  verboseOutput: false # Controls creation of intermediate files like _compressed.pdf and process_output directory
