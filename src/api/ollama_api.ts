@@ -408,3 +408,68 @@ export async function chatWithOllama(
     return null;
   }
 }
+
+/**
+ * Sends the full markdown content and a list of headings to the Ollama API to determine the correct heading hierarchy.
+ * @returns A JSON object with the corrected heading levels.
+ */
+export async function restructureHeadingsWithRag(
+  fullMarkdown: string,
+  headings: { text: string; level: number }[],
+  apiKey: string,
+  modelName: string,
+  prompt: string,
+  parameters: Record<string, any>
+): Promise<string | null> {
+  // Get the Ollama API endpoint from environment variables, default to localhost
+  const ollamaApiBase = process.env.OLLAMA_API_BASE || "http://localhost:11434";
+
+  const formattedPrompt = `
+${prompt}
+
+**Full Markdown Content:**
+\`\`\`markdown
+${fullMarkdown}
+\`\`\`
+
+**Headings List:**
+\`\`\`json
+${JSON.stringify(headings, null, 2)}
+\`\`\`
+`;
+
+  try {
+    // Filter out incompatible parameters
+    const filteredParameters = filterIncompatibleParameters(parameters);
+
+    // Prepare the request payload
+    const payload = {
+      model: modelName,
+      prompt: formattedPrompt,
+      stream: false,
+      ...filteredParameters
+    };
+
+    // Define API request function for retry
+    const makeApiRequest = async () => {
+      const resp = await axios.post(`${ollamaApiBase}/api/generate`, payload);
+      return resp;
+    };
+
+    // Make the API call with retry
+    const response = await retryWithBackoff(makeApiRequest);
+    if (response === null) {
+      return null;
+    }
+
+    // Parse the response
+    const responseData = response.data;
+
+    // Extract the text from the response
+    return responseData.response?.trim() || null;
+  } catch (e) {
+    const error = e instanceof Error ? e : new Error(String(e));
+    console.error(`⚠️ Error communicating with Ollama API for heading restructuring: ${error.message}`);
+    return null;
+  }
+}

@@ -8,11 +8,12 @@ import * as crypto from 'crypto';
 import { spawn } from 'child_process';
 
 import { loadConfig, getEnvVariable } from './config';
-import { 
+import {
   authenticateOpenrouterApi,
   extractTextFromImage as openrouterExtractTextFromImage,
   extractMarkdownFromText as openrouterExtractMarkdownFromText,
-  extractTocFromMarkdown as openrouterExtractTocFromMarkdown
+  extractTocFromMarkdown as openrouterExtractTocFromMarkdown,
+  restructureHeadingsWithRag as openrouterRestructureHeadingsWithRag
 } from './api/openrouter_api';
 import {
   authenticateOpenaiApi,
@@ -30,19 +31,22 @@ import {
   authenticateTogetherApi,
   extractTextFromImageTogetherAI,
   extractMarkdownFromTextTogetherAI,
-  extractTocFromMarkdownTogetherAI
+  extractTocFromMarkdownTogetherAI,
+  restructureHeadingsWithRagTogetherAI
 } from './api/together_api';
 import {
   authenticateGeminiApi,
   extractTextFromImageGemini,
   extractMarkdownFromTextGemini,
-  extractTocFromMarkdownGemini
+  extractTocFromMarkdownGemini,
+  restructureHeadingsWithRagGemini
 } from './api/gemini_api';
 import {
   authenticateFireworksApi,
   extractTextFromImage as fireworksExtractTextFromImage,
   extractMarkdownFromText as fireworksExtractMarkdownFromText,
-  extractTocFromMarkdown as fireworksExtractTocFromMarkdown
+  extractTocFromMarkdown as fireworksExtractTocFromMarkdown,
+  restructureHeadingsWithRag as fireworksRestructureHeadingsWithRag
 } from './api/fireworks_api';
 import {
   compressPdf,
@@ -70,6 +74,7 @@ import {
 import {
   estimateTokenCount
 } from './utils';
+import { MDCPluginSettings, DEFAULT_SETTINGS, MDCPromptParameters } from './plugin/types';
 import { updateMarkdownHeadings } from './markdown/markdown_headings';
 import {
   getDataUrl,
@@ -1137,10 +1142,61 @@ export async function main(): Promise<void> {
             }
 
             // Handle just heading adjustment
-            console.log(`🔧 Updating heading hierarchy based on TOC`);
+            console.log(`🔧 Updating heading hierarchy using AI-powered restructuring.`);
+
+            // Construct a complete MDCPluginSettings object from the CLI context
+            const aiSettings: MDCPluginSettings = {
+              nodePath: '', // Not used by CLI
+              cliPath: '', // Not used by CLI
+              configPath: '', // Not used by CLI
+              libreOfficePath: '', // Not used by CLI
+              pdfimagesPath: '', // Not used by CLI
+              pdfinfoPath: '', // Not used by CLI
+              pdftocairoPath: '', // Not used by CLI
+              apiProvider: apiProvider,
+              openrouterApiKey: OPENROUTER_API_KEY || '',
+              openaiApiKey: apiKey,
+              togetherApiKey: getEnvVariable('TOGETHER_API_KEY') || '',
+              geminiApiKey: getEnvVariable('GEMINI_API_KEY') || '',
+              fireworksApiKey: getEnvVariable('FIREWORKS_API_KEY') || '',
+              requestsPerMinute: options.requestsPerMinute ? parseInt(options.requestsPerMinute, 10) : 60,
+              extractAttachments: options.ma || false,
+              generateToc: options.table || false,
+              tokenLimit: options.token ? parseInt(options.token, 10) : 4000,
+              updateHeadings: options.headings || false,
+              useAiForHeadings: true, // Default to true for CLI
+              identicalImageThreshold: options.identicalImageThreshold ? parseInt(options.identicalImageThreshold, 10) : 3,
+              verboseOutput: verbose,
+              openrouterModel: { name: OPENROUTER_MODEL_NAME },
+              openaiModel: { name: OPENAI_MODEL_NAME },
+              ollamaModel: { name: OLLAMA_MODEL_NAME },
+              togetherModel: { name: TOGETHER_MODEL_NAME },
+              geminiModel: { name: GEMINI_MODEL_NAME },
+              fireworksModel: { name: FIREWORKS_MODEL_NAME },
+              customOpenAIProviders: [],
+              prompts: {
+                extractTextFromImage: {
+                  prompt: extractTextFromImagePrompt,
+                  parameters: extractTextFromImageParameters as MDCPromptParameters,
+                },
+                extractMarkdownFromText: {
+                  prompt: extractMarkdownFromTextPrompt,
+                  parameters: extractMarkdownFromTextParameters as MDCPromptParameters,
+                },
+                extractTocFromMarkdown: {
+                  prompt: extractTocFromMarkdownPrompt,
+                  parameters: extractTocFromMarkdownParameters as MDCPromptParameters,
+                },
+                restructureHeadingsWithRag: {
+                  prompt: config.prompts.restructure_headings_with_rag?.prompt || DEFAULT_SETTINGS.prompts.restructureHeadingsWithRag.prompt,
+                  parameters: (config.prompts.restructure_headings_with_rag?.parameters || DEFAULT_SETTINGS.prompts.restructureHeadingsWithRag.parameters) as MDCPromptParameters,
+                },
+              },
+            };
+
             let updatedContentAfterHeadings = await updateMarkdownHeadings(
               mdFileToProcess,
-              tocFilePath!,
+              aiSettings,
               outputDir // presentationOutputDir
             );
 

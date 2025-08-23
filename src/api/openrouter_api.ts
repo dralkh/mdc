@@ -301,3 +301,81 @@ export async function extractTocFromMarkdown(
     return null;
   }
 }
+
+/**
+ * Sends the full markdown content and a list of headings to the OpenRouter API to determine the correct heading hierarchy.
+ * @returns A JSON object with the corrected heading levels.
+ */
+export async function restructureHeadingsWithRag(
+  fullMarkdown: string,
+  headings: { text: string; level: number }[],
+  apiKey: string,
+  modelName: string,
+  prompt: string,
+  parameters: Record<string, any>
+): Promise<string | null> {
+  const headers = {
+    "Authorization": `Bearer ${apiKey}`,
+    "Content-Type": "application/json",
+  };
+
+  const formattedPrompt = `
+${prompt}
+
+**Full Markdown Content:**
+\`\`\`markdown
+${fullMarkdown}
+\`\`\`
+
+**Headings List:**
+\`\`\`json
+${JSON.stringify(headings, null, 2)}
+\`\`\`
+`;
+
+  const payload = {
+    model: modelName,
+    messages: [
+      {
+        role: "user",
+        content: formattedPrompt
+      }
+    ],
+    ...parameters
+  };
+
+  // Define API request function for retry
+  const makeApiRequest = async () => {
+    const resp = await axios.post(
+      "https://openrouter.ai/api/v1/chat/completions",
+      payload,
+      { headers }
+    );
+    return resp;
+  };
+
+  try {
+    // Make the API call with retry
+    const response = await retryWithBackoff(makeApiRequest);
+    if (response === null) {
+      return null;
+    }
+
+    if (response.status === 200) {
+      try {
+        return response.data.choices[0].message.content.trim();
+      } catch (e) {
+        const error = e instanceof Error ? e : new Error(String(e));
+        console.error(`⚠️ Unexpected response format from OpenRouter API for heading restructuring: ${error.message}`);
+        return null;
+      }
+    } else {
+      console.error(`⚠️ Heading restructuring API request failed with status code ${response.status}: ${JSON.stringify(response.data)}`);
+      return null;
+    }
+  } catch (e) {
+    const error = e instanceof Error ? e : new Error(String(e));
+    console.error(`⚠️ Error communicating with OpenRouter API for heading restructuring: ${error.message}`);
+    return null;
+  }
+}

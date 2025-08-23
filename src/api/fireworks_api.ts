@@ -249,3 +249,60 @@ export async function extractTocFromMarkdown(
     return null;
   }
 }
+
+/**
+ * Sends the full markdown content and a list of headings to the Fireworks API to determine the correct heading hierarchy.
+ * @returns A JSON object with the corrected heading levels.
+ */
+export async function restructureHeadingsWithRag(
+  fullMarkdown: string,
+  headings: { text: string; level: number }[],
+  apiKey: string,
+  modelName: string,
+  prompt: string,
+  parameters: Record<string, any>
+): Promise<string | null> {
+  const client = new OpenAI({ apiKey, baseURL: "https://api.fireworks.ai/inference/v1" });
+
+  const formattedPrompt = `
+${prompt}
+
+**Full Markdown Content:**
+\`\`\`markdown
+${fullMarkdown}
+\`\`\`
+
+**Headings List:**
+\`\`\`json
+${JSON.stringify(headings, null, 2)}
+\`\`\`
+`;
+
+  try {
+    const filteredParameters = filterIncompatibleParameters(parameters);
+
+    const makeApiRequest = async () => {
+      return await client.chat.completions.create({
+        model: modelName,
+        messages: [
+          {
+            role: "user",
+            content: formattedPrompt,
+          },
+        ],
+        ...filteredParameters,
+      });
+    };
+
+    const response = await retryWithBackoff(makeApiRequest);
+    if (response === null) {
+      return null;
+    }
+
+    return response.choices[0].message.content?.trim() || null;
+  } catch (e) {
+    const error = e instanceof Error ? e : new Error(String(e));
+    console.error(`⚠️ Error communicating with Fireworks API for heading restructuring: ${error.message}`);
+    return null;
+  }
+}

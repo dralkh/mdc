@@ -385,6 +385,15 @@ export class MDCSettingTab extends PluginSettingTab {
     	this.plugin.settings.updateHeadings = value;
     	await this.plugin.saveSettings();
     }));
+  new Setting(container)
+   .setName('Use AI for Heading Restructuring (RAG)')
+   .setDesc('When enabled, uses a more advanced AI workflow with full document context to determine heading hierarchy. When disabled, uses the older TOC-based method.')
+   .addToggle(toggle => toggle
+    .setValue(this.plugin.settings.useAiForHeadings)
+    .onChange(async (value) => {
+    	this.plugin.settings.useAiForHeadings = value;
+    	await this.plugin.saveSettings();
+    }));
 
   new Setting(container)
    .setName('Identical Image Threshold (PDF Media)')

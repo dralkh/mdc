@@ -39,6 +39,10 @@ export interface Config {
       prompt: string;
       parameters: Record<string, any>;
     };
+    restructure_headings_with_rag: {
+      prompt: string;
+      parameters: Record<string, any>;
+    };
   };
   pdf_processing: { // Added pdf_processing
     identical_image_threshold: number;

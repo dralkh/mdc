@@ -252,3 +252,70 @@ export async function extractTocFromMarkdownGemini(
     return null;
   }
 }
+
+/**
+ * Sends the full markdown content and a list of headings to the Gemini API to determine the correct heading hierarchy.
+ * @returns A JSON object with the corrected heading levels.
+ */
+export async function restructureHeadingsWithRagGemini(
+  fullMarkdown: string,
+  headings: { text: string; level: number }[],
+  apiKey: string,
+  modelName: string,
+  prompt: string,
+  parameters: Record<string, any>
+): Promise<string | null> {
+  const genAI = new GoogleGenAI({ apiKey });
+
+  const formattedPrompt = `
+${prompt}
+
+**Full Markdown Content:**
+\`\`\`markdown
+${fullMarkdown}
+\`\`\`
+
+**Headings List:**
+\`\`\`json
+${JSON.stringify(headings, null, 2)}
+\`\`\`
+`;
+
+  const requestPayloadContents = [{ role: "user", parts: [{ text: formattedPrompt }] }];
+
+  const apiCall = async () => {
+    const generateContentResponse = await genAI.models.generateContent({
+        model: modelName,
+        contents: requestPayloadContents,
+        // generationConfig: parameters as GenerationConfig, // Omitting for now
+        // safetySettings: [ // Omitting for now
+        //     { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE },
+        //     { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE },
+        //     { category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE },
+        //     { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE },
+        // ]
+    });
+    if (generateContentResponse.promptFeedback?.blockReason) {
+      console.error(`❌ Gemini API blocked the prompt for heading restructuring: ${generateContentResponse.promptFeedback.blockReason}`);
+      if (generateContentResponse.promptFeedback.blockReasonMessage) {
+        console.error(`   Reason message: ${generateContentResponse.promptFeedback.blockReasonMessage}`);
+      }
+      return null;
+    }
+    return generateContentResponse.text;
+  };
+
+  try {
+    const response = await retryWithBackoff(apiCall);
+    if (response) {
+      console.log(`✅ Restructured headings using Gemini model ${modelName}.`);
+      return response.trim();
+    }
+    console.warn(`⚠️ Failed to restructure headings using Gemini model ${modelName} after retries.`);
+    return null;
+  } catch (e) {
+    const error = e instanceof Error ? e : new Error(String(e));
+    console.error(`⚠️ Error communicating with Gemini API for heading restructuring: ${error.message}`);
+    return null;
+  }
+}

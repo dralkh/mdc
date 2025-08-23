@@ -280,3 +280,82 @@ export async function extractTocFromMarkdownTogetherAI(
     return null;
   }
 }
+
+/**
+ * Sends the full markdown content and a list of headings to the Together AI API to determine the correct heading hierarchy.
+ * @returns A JSON object with the corrected heading levels.
+ */
+export async function restructureHeadingsWithRagTogetherAI(
+  fullMarkdown: string,
+  headings: { text: string; level: number }[],
+  apiKey: string,
+  modelName: string,
+  prompt: string,
+  parameters: Record<string, any>
+): Promise<string | null> {
+  const headers = {
+    "Authorization": `Bearer ${apiKey}`,
+    "Content-Type": "application/json",
+  };
+
+  const formattedPrompt = `
+${prompt}
+
+**Full Markdown Content:**
+\`\`\`markdown
+${fullMarkdown}
+\`\`\`
+
+**Headings List:**
+\`\`\`json
+${JSON.stringify(headings, null, 2)}
+\`\`\`
+`;
+
+  const payload = {
+    model: modelName,
+    messages: [
+      {
+        role: "user",
+        content: formattedPrompt
+      }
+    ],
+    ...parameters
+  };
+
+  const makeApiRequest = async () => {
+    const resp = await axios.post(
+      `${TOGETHER_API_BASE_URL}/chat/completions`,
+      payload,
+      { headers }
+    );
+    return resp;
+  };
+
+  try {
+    const response = await retryWithBackoff(makeApiRequest, 5, 2000, TOGETHER_AI_RATE_LIMIT.requests_per_second);
+    if (response === null) {
+      return null;
+    }
+    if (response.status === 200) {
+      try {
+        return response.data.choices[0].message.content.trim();
+      } catch (e) {
+        const error = e instanceof Error ? e : new Error(String(e));
+        console.error(`⚠️ Unexpected response format from Together AI API (Heading Restructuring): ${error.message}`);
+        console.error(`Response Data: ${JSON.stringify(response.data)}`);
+        return null;
+      }
+    } else {
+      console.error(`⚠️ Heading restructuring API request failed with status code ${response.status}: ${JSON.stringify(response.data)}`);
+      return null;
+    }
+  } catch (e) {
+    const error = e instanceof Error ? e : new Error(String(e));
+    console.error(`⚠️ Error communicating with Together AI API (Heading Restructuring): ${error.message}`);
+    if (axios.isAxiosError(error) && error.response) {
+      console.error(`Response Data: ${JSON.stringify(error.response.data)}`);
+    }
+    return null;
+  }
+}
