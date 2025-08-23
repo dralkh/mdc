@@ -288,23 +288,36 @@ export default class MDCIntegrationPlugin extends Plugin {
 
 			
 
-			// Add API key to environment based on the selected provider
-			if (this.settings.apiProvider === 'openrouter' && this.settings.openrouterApiKey) {
-				env.OPENROUTER_API_KEY = this.settings.openrouterApiKey;
-			} else if (this.settings.apiProvider === 'openai' && this.settings.openaiApiKey) {
-				env.OPENAI_API_KEY = this.settings.openaiApiKey;
-			} else if (this.settings.apiProvider === 'together' && this.settings.togetherApiKey) {
-				env.TOGETHER_API_KEY = this.settings.togetherApiKey;
-			} else if (this.settings.apiProvider === 'gemini' && this.settings.geminiApiKey) {
-				env.GEMINI_API_KEY = this.settings.geminiApiKey; // Or GOOGLE_API_KEY
-			}
+			// Find the selected provider configuration
+			const selectedProviderId = this.settings.apiProvider;
+			const customProvider = this.settings.customOpenAIProviders.find(p => p.id === selectedProviderId);
 
-			// Add model overrides to environment
-			env.MDC_OPENROUTER_MODEL = this.settings.openrouterModel.name;
-			env.MDC_OPENAI_MODEL = this.settings.openaiModel.name;
-			env.MDC_OLLAMA_MODEL = this.settings.ollamaModel.name;
-			env.MDC_TOGETHER_MODEL = this.settings.togetherModel.name;
-			env.MDC_GEMINI_MODEL = this.settings.geminiModel.name; // Added for Gemini
+			if (customProvider) {
+				// This is a custom OpenAI-compatible provider
+				env.MDC_API_PROVIDER = 'openai'; // Treat as 'openai' for the CLI
+				env.OPENAI_API_KEY = customProvider.apiKey;
+				env.MDC_OPENAI_BASE_URL = customProvider.baseURL;
+				env.MDC_OPENAI_MODEL = customProvider.model;
+			} else {
+				// This is a default provider
+				env.MDC_API_PROVIDER = selectedProviderId;
+				if (selectedProviderId === 'openrouter' && this.settings.openrouterApiKey) {
+					env.OPENROUTER_API_KEY = this.settings.openrouterApiKey;
+				} else if (selectedProviderId === 'openai' && this.settings.openaiApiKey) {
+					env.OPENAI_API_KEY = this.settings.openaiApiKey;
+				} else if (selectedProviderId === 'together' && this.settings.togetherApiKey) {
+					env.TOGETHER_API_KEY = this.settings.togetherApiKey;
+				} else if (selectedProviderId === 'gemini' && this.settings.geminiApiKey) {
+					env.GEMINI_API_KEY = this.settings.geminiApiKey;
+				}
+
+				// Set model names for default providers
+				env.MDC_OPENROUTER_MODEL = this.settings.openrouterModel.name;
+				env.MDC_OPENAI_MODEL = this.settings.openaiModel.name;
+				env.MDC_OLLAMA_MODEL = this.settings.ollamaModel.name;
+				env.MDC_TOGETHER_MODEL = this.settings.togetherModel.name;
+				env.MDC_GEMINI_MODEL = this.settings.geminiModel.name;
+			}
 
 			// Execute the command with the environment variables and set working directory
 			// Set working directory to the plugin directory so config.yaml can be found

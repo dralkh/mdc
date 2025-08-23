@@ -140,6 +140,10 @@ TOGETHER_API_KEY=your_together_key_here
 
 # Ollama (Local models)
 OLLAMA_API_KEY=your_ollama_key_here
+
+# OpenAI-Compatible API (Optional)
+# Use this to connect to a custom or local OpenAI-compatible API endpoint
+MDC_OPENAI_BASE_URL=http://localhost:8080/v1
 ```
 
 #### Supported AI Models

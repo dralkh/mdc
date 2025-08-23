@@ -14,14 +14,14 @@ interface RateLimitInfo {
  * - success: True if authentication is successful, else False
  * - rate_limit: Object containing rate limit information or null if authentication failed
  */
-export async function authenticateOpenaiApi(): Promise<[boolean, RateLimitInfo | null]> {
+export async function authenticateOpenaiApi(baseURL?: string): Promise<[boolean, RateLimitInfo | null]> {
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) {
     console.error("❌ OpenAI API key not found in environment variables.");
     return [false, null];
   }
 
-  const client = new OpenAI({ apiKey });
+  const client = new OpenAI({ apiKey, baseURL });
   
   // Define API request function for retry
   const authRequest = async () => {
@@ -106,12 +106,13 @@ function filterIncompatibleParameters(parameters: Record<string, any>): Record<s
  */
 export async function extractTextFromImage(
   dataUrl: string, 
-  apiKey: string, 
-  modelName: string, 
-  prompt: string, 
-  parameters: Record<string, any>
+  apiKey: string,
+  modelName: string,
+  prompt: string,
+  parameters: Record<string, any>,
+  baseURL?: string
 ): Promise<string | null> {
-  const client = new OpenAI({ apiKey });
+  const client = new OpenAI({ apiKey, baseURL });
   
   try {
     // Filter out incompatible parameters
@@ -163,12 +164,13 @@ export async function extractTextFromImage(
 export async function extractMarkdownFromText(
   allText: string, 
   baseFilename: string, 
-  apiKey: string, 
-  modelName: string, 
-  prompt: string, 
-  parameters: Record<string, any>
+  apiKey: string,
+  modelName: string,
+  prompt: string,
+  parameters: Record<string, any>,
+  baseURL?: string
 ): Promise<string | null> {
-  const client = new OpenAI({ apiKey });
+  const client = new OpenAI({ apiKey, baseURL });
   
   try {
     // Filter out incompatible parameters
@@ -218,12 +220,13 @@ export async function extractMarkdownFromText(
 export async function extractTocFromMarkdown(
   extractedHeadingsText: string, 
   baseFilename: string, 
-  apiKey: string, 
-  modelName: string, 
-  prompt: string, 
-  parameters: Record<string, any>
+  apiKey: string,
+  modelName: string,
+  prompt: string,
+  parameters: Record<string, any>,
+  baseURL?: string
 ): Promise<string | null> {
-  const client = new OpenAI({ apiKey });
+  const client = new OpenAI({ apiKey, baseURL });
   
   // Format the prompt with placeholders
   let formattedPrompt: string;

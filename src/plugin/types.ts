@@ -3,6 +3,14 @@ export interface MDCModelSettings {
 	name: string;
 }
 
+export interface OpenAICompatibleProvider {
+	id: string;
+	name: string;
+	apiKey: string;
+	baseURL: string;
+	model: string;
+}
+
 export interface MDCPromptParameters {
 	temperature: number;
 	top_p: number;
@@ -27,7 +35,7 @@ export interface MDCPluginSettings {
 	pdfimagesPath: string;  // New setting for pdfimages
 	pdfinfoPath: string;    // New setting for pdfinfo
 	pdftocairoPath: string; // New setting for pdftocairo
-	apiProvider: 'openrouter' | 'openai' | 'ollama' | 'together' | 'gemini'; // Added 'gemini'
+	apiProvider: string;
 	openrouterApiKey: string; // Separate API key for OpenRouter
 	openaiApiKey: string;     // Separate API key for OpenAI
 	togetherApiKey: string;   // API key for Together AI
@@ -49,6 +57,9 @@ export interface MDCPluginSettings {
 	ollamaModel: MDCModelSettings;
 	togetherModel: MDCModelSettings; // Added for Together AI
 	geminiModel: MDCModelSettings;   // Added for Gemini
+
+	// Custom OpenAI-compatible providers
+	customOpenAIProviders: OpenAICompatibleProvider[];
 
 	// Prompt configurations
 	prompts: {
@@ -99,6 +110,8 @@ export const DEFAULT_SETTINGS: MDCPluginSettings = {
 	ollamaModel: { name: "gemma3:12b" },
 	togetherModel: { name: "meta-llama/Llama-4-Maverick-17B-128E-Instruct-FP8" }, // Default Together AI model
 	geminiModel: { name: "gemini-2.5-flash-preview-04-17" }, // Default Gemini model
+
+	customOpenAIProviders: [],
 
 	// Prompt configurations
 	prompts: {

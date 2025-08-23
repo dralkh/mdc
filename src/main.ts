@@ -87,7 +87,8 @@ async function processImage(
   modelName: string, 
   prompt: string, 
   parameters: Record<string, any>,
-  apiProvider: 'openrouter' | 'openai' | 'ollama' | 'together' | 'gemini' = 'openrouter' // Added gemini
+  apiProvider: 'openrouter' | 'openai' | 'ollama' | 'together' | 'gemini' = 'openrouter', // Added gemini
+  baseURL?: string
 ): Promise<string> {
   // For Ollama only: prepare the image for LLaVA compatibility if needed
   let dataUrl: string | null;
@@ -118,7 +119,7 @@ async function processImage(
 
     let text: string | null;
     if (apiProvider.toLowerCase() === 'openai') {
-      text = await openaiExtractTextFromImage(dataUrl, apiKey, modelName, prompt, parameters);
+      text = await openaiExtractTextFromImage(dataUrl, apiKey, modelName, prompt, parameters, baseURL);
     } else if (apiProvider.toLowerCase() === 'ollama') {
       text = await ollamaExtractTextFromImage(dataUrl, apiKey, modelName, prompt, parameters);
     } else if (apiProvider.toLowerCase() === 'together') {
@@ -165,6 +166,7 @@ export async function main(): Promise<void> {
   // These can be set by the Obsidian plugin
   const OPENROUTER_MODEL_NAME = getEnvVariable("MDC_OPENROUTER_MODEL") || config.openrouter_model.name;
   const OPENAI_MODEL_NAME = getEnvVariable("MDC_OPENAI_MODEL") || config.openai_model.name;
+  const OPENAI_BASE_URL = getEnvVariable("MDC_OPENAI_BASE_URL") || config.openai_model.baseURL;
   const OLLAMA_MODEL_NAME = getEnvVariable("MDC_OLLAMA_MODEL") || config.ollama_model.name;
   const TOGETHER_MODEL_NAME = getEnvVariable("MDC_TOGETHER_MODEL") || config.together_model.name;
   const GEMINI_MODEL_NAME = getEnvVariable("MDC_GEMINI_MODEL") || config.gemini_model.name; // Added Gemini
@@ -225,7 +227,7 @@ export async function main(): Promise<void> {
       }
       
       // Determine the API key based on the selected provider
-      const apiProvider = options.api.toLowerCase();
+      const apiProvider = (getEnvVariable('MDC_API_PROVIDER') || options.api).toLowerCase();
       let apiKey: string;
       
       if (apiProvider === 'openai') {
@@ -315,7 +317,7 @@ export async function main(): Promise<void> {
       
       if (apiProvider === 'openai') {
         console.log('🔑 Authenticating with OpenAI API...');
-        [authSuccess, rateLimitInfo] = await authenticateOpenaiApi();
+        [authSuccess, rateLimitInfo] = await authenticateOpenaiApi(OPENAI_BASE_URL);
         if (!authSuccess) {
           console.error('❌ Authentication failed. Please check your OpenAI API key.');
           process.exit(1);
@@ -453,8 +455,9 @@ export async function main(): Promise<void> {
           modelName: string,
           prompt: string,
           parameters: Record<string, any>,
-          apiProvider: 'openrouter' | 'openai' | 'ollama' | 'together' | 'gemini' // Added gemini
-        ): Promise<string> => {
+          apiProvider: 'openrouter' | 'openai' | 'ollama' | 'together' | 'gemini', // Added gemini
+      baseURL?: string
+       ): Promise<string> => {
           // For Ollama only: prepare the image for LLaVA compatibility if needed
           let dataUrl: string | null;
 
@@ -484,7 +487,7 @@ export async function main(): Promise<void> {
 
             let text: string | null;
             if (apiProvider.toLowerCase() === 'openai') {
-              text = await openaiExtractTextFromImage(dataUrl, apiKey, modelName, prompt, parameters);
+              text = await openaiExtractTextFromImage(dataUrl, apiKey, modelName, prompt, parameters, baseURL);
             } else if (apiProvider.toLowerCase() === 'ollama') {
               text = await ollamaExtractTextFromImage(dataUrl, apiKey, modelName, prompt, parameters);
             } else if (apiProvider.toLowerCase() === 'together') {
@@ -536,7 +539,7 @@ export async function main(): Promise<void> {
             extractTextFromImagePrompt,
             extractTextFromImageParameters,
             apiProvider as 'openrouter' | 'openai' | 'ollama' | 'together' | 'gemini', // Added gemini
-            processImageFn,
+            (imgPath, apiKey, modelName, prompt, parameters, apiProvider) => processImageFn(imgPath, apiKey, modelName, prompt, parameters, apiProvider, OPENAI_BASE_URL),
             timeBetweenRequests
           );
         } else if (updatedFileExt === '.pdf') {
@@ -558,7 +561,7 @@ export async function main(): Promise<void> {
             extractTextFromImagePrompt,
             extractTextFromImageParameters,
             apiProvider as 'openrouter' | 'openai' | 'ollama' | 'together' | 'gemini', // Added gemini
-            processImageFn,
+            (imgPath, apiKey, modelName, prompt, parameters, apiProvider) => processImageFn(imgPath, apiKey, modelName, prompt, parameters, apiProvider, OPENAI_BASE_URL),
             timeBetweenRequests
           );
         } else {
@@ -811,7 +814,8 @@ export async function main(): Promise<void> {
                     apiKey,
                     OPENAI_MODEL_NAME,
                     extractMarkdownFromTextPrompt,
-                    extractMarkdownFromTextParameters
+                    extractMarkdownFromTextParameters,
+                    OPENAI_BASE_URL
                   );
                 } else if (apiProvider === 'ollama') {
                   markdownChunk = await ollamaExtractMarkdownFromText(
@@ -886,7 +890,8 @@ export async function main(): Promise<void> {
                     apiKey,
                     OPENAI_MODEL_NAME,
                     extractMarkdownFromTextPrompt,
-                    extractMarkdownFromTextParameters
+                    extractMarkdownFromTextParameters,
+                    OPENAI_BASE_URL
                   );
                 } else if (apiProvider === 'ollama') {
                   markdownChunk = await ollamaExtractMarkdownFromText(
@@ -944,7 +949,8 @@ export async function main(): Promise<void> {
                 apiKey,
                 OPENAI_MODEL_NAME,
                 extractMarkdownFromTextPrompt,
-                extractMarkdownFromTextParameters
+                extractMarkdownFromTextParameters,
+                OPENAI_BASE_URL
               );
             } else if (apiProvider === 'ollama') {
               markdown = await ollamaExtractMarkdownFromText(
@@ -1038,7 +1044,8 @@ export async function main(): Promise<void> {
                 apiKey,
                 OPENAI_MODEL_NAME,
                 extractTocFromMarkdownPrompt,
-                extractTocFromMarkdownParameters
+                extractTocFromMarkdownParameters,
+                OPENAI_BASE_URL
               );
             } else if (apiProvider === 'ollama') {
               toc = await ollamaExtractTocFromMarkdown(
