@@ -41,6 +41,7 @@ export interface MDCPluginSettings {
 	openaiApiKey: string;     // Separate API key for OpenAI
 	togetherApiKey: string;   // API key for Together AI
 	geminiApiKey: string;     // API key for Gemini
+	fireworksApiKey: string;  // API key for Fireworks
 	requestsPerMinute: number;
 
 	
@@ -59,6 +60,7 @@ export interface MDCPluginSettings {
 	ollamaModel: MDCModelSettings;
 	togetherModel: MDCModelSettings; // Added for Together AI
 	geminiModel: MDCModelSettings;   // Added for Gemini
+	fireworksModel: MDCModelSettings; // Added for Fireworks
 
 	// Custom OpenAI-compatible providers
 	customOpenAIProviders: OpenAICompatibleProvider[];
@@ -95,6 +97,7 @@ export const DEFAULT_SETTINGS: MDCPluginSettings = {
 	openaiApiKey: '',
 	togetherApiKey: '', // Added for Together AI
 	geminiApiKey: '',   // Added for Gemini
+	fireworksApiKey: '', // Added for Fireworks
 	requestsPerMinute: 60,
 
 	
@@ -113,6 +116,7 @@ export const DEFAULT_SETTINGS: MDCPluginSettings = {
 	ollamaModel: { name: "gemma3:12b" },
 	togetherModel: { name: "meta-llama/Llama-4-Maverick-17B-128E-Instruct-FP8" }, // Default Together AI model
 	geminiModel: { name: "gemini-2.5-flash-preview-04-17" }, // Default Gemini model
+	fireworksModel: { name: "accounts/fireworks/models/qwen2p5-vl-32b-instruct" }, // Default Fireworks model
 
 	customOpenAIProviders: [],
 

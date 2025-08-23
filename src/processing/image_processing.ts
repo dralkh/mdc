@@ -62,8 +62,8 @@ export async function extractRenderedImagesFromPdf(
   modelName: string,
   prompt: string,
   parameters: Record<string, any>,
-  apiProvider: 'openrouter' | 'openai' | 'ollama' | 'together' | 'gemini', // Added 'gemini'
-  processImageFn: (imagePath: string, apiKey: string, modelName: string, prompt: string, parameters: Record<string, any>, apiProvider: 'openrouter' | 'openai' | 'ollama' | 'together' | 'gemini') => Promise<string>, // Added 'gemini'
+  apiProvider: 'openrouter' | 'openai' | 'ollama' | 'together' | 'gemini' | 'fireworks',
+  processImageFn: (imagePath: string, apiKey: string, modelName: string, prompt: string, parameters: Record<string, any>, apiProvider: 'openrouter' | 'openai' | 'ollama' | 'together' | 'gemini' | 'fireworks') => Promise<string>,
   timeBetweenRequests: number
 ): Promise<{ imgPath: string, result: string, tokenCount: number }[]> {
   try {
@@ -639,8 +639,8 @@ export async function extractRenderedImagesFromPptx(
   modelName: string,
   prompt: string,
   parameters: Record<string, any>,
-  apiProvider: 'openrouter' | 'openai' | 'ollama' | 'together' | 'gemini', // Added 'gemini'
-  processImageFn: (imagePath: string, apiKey: string, modelName: string, prompt: string, parameters: Record<string, any>, apiProvider: 'openrouter' | 'openai' | 'ollama' | 'together' | 'gemini') => Promise<string>, // Added 'gemini'
+  apiProvider: 'openrouter' | 'openai' | 'ollama' | 'together' | 'gemini' | 'fireworks',
+  processImageFn: (imagePath: string, apiKey: string, modelName: string, prompt: string, parameters: Record<string, any>, apiProvider: 'openrouter' | 'openai' | 'ollama' | 'together' | 'gemini' | 'fireworks') => Promise<string>,
   timeBetweenRequests: number
 ): Promise<{ imgPath: string, result: string, tokenCount: number }[]> {
   // Import conversion function

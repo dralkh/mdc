@@ -39,6 +39,12 @@ import {
   extractTocFromMarkdownGemini
 } from './api/gemini_api';
 import {
+  authenticateFireworksApi,
+  extractTextFromImage as fireworksExtractTextFromImage,
+  extractMarkdownFromText as fireworksExtractMarkdownFromText,
+  extractTocFromMarkdown as fireworksExtractTocFromMarkdown
+} from './api/fireworks_api';
+import {
   compressPdf,
   optimizePptxImages,
   convertPresentationToPptx,
@@ -88,7 +94,7 @@ async function processImage(
   modelName: string, 
   prompt: string, 
   parameters: Record<string, any>,
-  apiProvider: 'openrouter' | 'openai' | 'ollama' | 'together' | 'gemini' = 'openrouter', // Added gemini
+  apiProvider: 'openrouter' | 'openai' | 'ollama' | 'together' | 'gemini' | 'fireworks' = 'openrouter',
   baseURL?: string
 ): Promise<string> {
   // For Ollama only: prepare the image for LLaVA compatibility if needed
@@ -127,6 +133,8 @@ async function processImage(
       text = await extractTextFromImageTogetherAI(dataUrl, apiKey, modelName, prompt, parameters);
     } else if (apiProvider.toLowerCase() === 'gemini') {
       text = await extractTextFromImageGemini(dataUrl, apiKey, modelName, prompt, parameters);
+    } else if (apiProvider.toLowerCase() === 'fireworks') {
+      text = await fireworksExtractTextFromImage(dataUrl, apiKey, modelName, prompt, parameters);
     } else {  // Default to OpenRouter
       text = await openrouterExtractTextFromImage(dataUrl, apiKey, modelName, prompt, parameters);
     }
@@ -171,6 +179,7 @@ export async function main(): Promise<void> {
   const OLLAMA_MODEL_NAME = getEnvVariable("MDC_OLLAMA_MODEL") || config.ollama_model.name;
   const TOGETHER_MODEL_NAME = getEnvVariable("MDC_TOGETHER_MODEL") || config.together_model.name;
   const GEMINI_MODEL_NAME = getEnvVariable("MDC_GEMINI_MODEL") || config.gemini_model.name; // Added Gemini
+  const FIREWORKS_MODEL_NAME = getEnvVariable("MDC_FIREWORKS_MODEL") || config.fireworks_model.name;
 
   // Default time between requests (will be overridden later based on rate limits)
   let timeBetweenRequests = 1000;  // Default to 1 second between requests
@@ -225,7 +234,7 @@ export async function main(): Promise<void> {
     .argument('<input-file>', 'Path to the input PPTX, PPT, PPSX, PDF, DOC, or DOCX file')
     .option('--md', 'Convert the extracted content into a Markdown (.md) file')
     .option('--mr', 'Only extract basefilename_markdown_text.md without other outputs')
-    .option('--api <provider>', 'API provider to use (openrouter, openai, ollama, together, or gemini)', 'openrouter') // Added gemini
+    .option('--api <provider>', 'API provider to use (openrouter, openai, ollama, together, gemini, or fireworks)', 'openrouter')
     .option('--api-key, -k <key>', 'API key for the selected provider')
     .option('--ma', 'Include attachments extraction and processing')
     .option('--token <limit>', 'Maximum number of tokens per chunk for processing')
@@ -268,6 +277,12 @@ export async function main(): Promise<void> {
         apiKey = options.apiKey || getEnvVariable('GOOGLE_API_KEY') || getEnvVariable('GEMINI_API_KEY') || '';
         if (!apiKey) {
           console.error('❌ Gemini API key not provided. Use --api-key or set GOOGLE_API_KEY/GEMINI_API_KEY in env.');
+          process.exit(1);
+        }
+      } else if (apiProvider === 'fireworks') {
+        apiKey = options.apiKey || getEnvVariable('FIREWORKS_API_KEY') || '';
+        if (!apiKey) {
+          console.error('❌ Fireworks API key not provided. Use --api-key or set FIREWORKS_API_KEY in env.');
           process.exit(1);
         }
       } else {  // Default to OpenRouter
@@ -360,6 +375,13 @@ export async function main(): Promise<void> {
           [authSuccess, rateLimitInfo] = await authenticateGeminiApi(apiKey);
           if (!authSuccess) {
             console.error('❌ Authentication failed. Please check your Gemini API key.');
+            process.exit(1);
+          }
+        } else if (apiProvider === 'fireworks') {
+          console.log('🔑 Authenticating with Fireworks API...');
+          [authSuccess, rateLimitInfo] = await authenticateFireworksApi();
+          if (!authSuccess) {
+            console.error('❌ Authentication failed. Please check your Fireworks API key.');
             process.exit(1);
           }
         } else {  // Default to OpenRouter
@@ -481,7 +503,7 @@ export async function main(): Promise<void> {
           modelName: string,
           prompt: string,
           parameters: Record<string, any>,
-          apiProvider: 'openrouter' | 'openai' | 'ollama' | 'together' | 'gemini', // Added gemini
+          apiProvider: 'openrouter' | 'openai' | 'ollama' | 'together' | 'gemini' | 'fireworks',
       baseURL?: string
        ): Promise<string> => {
           // For Ollama only: prepare the image for LLaVA compatibility if needed
@@ -520,6 +542,8 @@ export async function main(): Promise<void> {
               text = await extractTextFromImageTogetherAI(dataUrl, apiKey, modelName, prompt, parameters);
             } else if (apiProvider.toLowerCase() === 'gemini') {
               text = await extractTextFromImageGemini(dataUrl, apiKey, modelName, prompt, parameters);
+            } else if (apiProvider.toLowerCase() === 'fireworks') {
+              text = await fireworksExtractTextFromImage(dataUrl, apiKey, modelName, prompt, parameters);
             } else { // Default to OpenRouter
               text = await openrouterExtractTextFromImage(dataUrl, apiKey, modelName, prompt, parameters);
             }
@@ -561,10 +585,10 @@ export async function main(): Promise<void> {
             renderedDir,
             baseFilename,
             apiKey,
-            apiProvider === 'openai' ? OPENAI_MODEL_NAME : (apiProvider === 'ollama' ? OLLAMA_MODEL_NAME : (apiProvider === 'together' ? TOGETHER_MODEL_NAME : (apiProvider === 'gemini' ? GEMINI_MODEL_NAME : OPENROUTER_MODEL_NAME))), // Added Gemini
+            apiProvider === 'openai' ? OPENAI_MODEL_NAME : (apiProvider === 'ollama' ? OLLAMA_MODEL_NAME : (apiProvider === 'together' ? TOGETHER_MODEL_NAME : (apiProvider === 'gemini' ? GEMINI_MODEL_NAME : (apiProvider === 'fireworks' ? FIREWORKS_MODEL_NAME : OPENROUTER_MODEL_NAME)))),
             extractTextFromImagePrompt,
             extractTextFromImageParameters,
-            apiProvider as 'openrouter' | 'openai' | 'ollama' | 'together' | 'gemini', // Added gemini
+            apiProvider as 'openrouter' | 'openai' | 'ollama' | 'together' | 'gemini' | 'fireworks',
             (imgPath, apiKey, modelName, prompt, parameters, apiProvider) => processImageFn(imgPath, apiKey, modelName, prompt, parameters, apiProvider, OPENAI_BASE_URL),
             timeBetweenRequests
           );
@@ -583,10 +607,10 @@ export async function main(): Promise<void> {
             renderedDir,
             baseFilename,
             apiKey,
-            apiProvider === 'openai' ? OPENAI_MODEL_NAME : (apiProvider === 'ollama' ? OLLAMA_MODEL_NAME : (apiProvider === 'together' ? TOGETHER_MODEL_NAME : (apiProvider === 'gemini' ? GEMINI_MODEL_NAME : OPENROUTER_MODEL_NAME))), // Added Gemini
+            apiProvider === 'openai' ? OPENAI_MODEL_NAME : (apiProvider === 'ollama' ? OLLAMA_MODEL_NAME : (apiProvider === 'together' ? TOGETHER_MODEL_NAME : (apiProvider === 'gemini' ? GEMINI_MODEL_NAME : (apiProvider === 'fireworks' ? FIREWORKS_MODEL_NAME : OPENROUTER_MODEL_NAME)))),
             extractTextFromImagePrompt,
             extractTextFromImageParameters,
-            apiProvider as 'openrouter' | 'openai' | 'ollama' | 'together' | 'gemini', // Added gemini
+            apiProvider as 'openrouter' | 'openai' | 'ollama' | 'together' | 'gemini' | 'fireworks',
             (imgPath, apiKey, modelName, prompt, parameters, apiProvider) => processImageFn(imgPath, apiKey, modelName, prompt, parameters, apiProvider, OPENAI_BASE_URL),
             timeBetweenRequests
           );
@@ -830,6 +854,8 @@ export async function main(): Promise<void> {
                   markdownChunk = await extractMarkdownFromTextTogetherAI(chunk, `${baseFilename}_part${idx + 1}`, apiKey, TOGETHER_MODEL_NAME, extractMarkdownFromTextPrompt, extractMarkdownFromTextParameters);
                 } else if (apiProvider === 'gemini') {
                     markdownChunk = await extractMarkdownFromTextGemini(chunk, `${baseFilename}_part${idx + 1}`, apiKey, GEMINI_MODEL_NAME, extractMarkdownFromTextPrompt, extractMarkdownFromTextParameters);
+                } else if (apiProvider === 'fireworks') {
+                  markdownChunk = await fireworksExtractMarkdownFromText(chunk, `${baseFilename}_part${idx + 1}`, apiKey, FIREWORKS_MODEL_NAME, extractMarkdownFromTextPrompt, extractMarkdownFromTextParameters);
                 } else {
                   markdownChunk = await openrouterExtractMarkdownFromText(chunk, `${baseFilename}_part${idx + 1}`, apiKey, OPENROUTER_MODEL_NAME, extractMarkdownFromTextPrompt, extractMarkdownFromTextParameters);
                 }
@@ -907,6 +933,15 @@ export async function main(): Promise<void> {
                 baseFilename,
                 apiKey,
                 GEMINI_MODEL_NAME,
+                extractMarkdownFromTextPrompt,
+                extractMarkdownFromTextParameters
+              );
+            } else if (apiProvider === 'fireworks') {
+              markdown = await fireworksExtractMarkdownFromText(
+                allTextForMarkdown,
+                baseFilename,
+                apiKey,
+                FIREWORKS_MODEL_NAME,
                 extractMarkdownFromTextPrompt,
                 extractMarkdownFromTextParameters
               );
@@ -1002,6 +1037,15 @@ export async function main(): Promise<void> {
                 baseFilename,
                 apiKey,
                 GEMINI_MODEL_NAME,
+                extractTocFromMarkdownPrompt,
+                extractTocFromMarkdownParameters
+              );
+            } else if (apiProvider === 'fireworks') {
+              toc = await fireworksExtractTocFromMarkdown(
+                extractedHeadingsText,
+                baseFilename,
+                apiKey,
+                FIREWORKS_MODEL_NAME,
                 extractTocFromMarkdownPrompt,
                 extractTocFromMarkdownParameters
               );

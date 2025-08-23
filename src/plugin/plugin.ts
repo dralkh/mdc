@@ -312,6 +312,8 @@ export default class MDCIntegrationPlugin extends Plugin {
 					env.TOGETHER_API_KEY = this.settings.togetherApiKey;
 				} else if (selectedProviderId === 'gemini' && this.settings.geminiApiKey) {
 					env.GEMINI_API_KEY = this.settings.geminiApiKey;
+				} else if (selectedProviderId === 'fireworks' && this.settings.fireworksApiKey) {
+					env.FIREWORKS_API_KEY = this.settings.fireworksApiKey;
 				}
 
 				// Set model names for default providers
@@ -320,6 +322,7 @@ export default class MDCIntegrationPlugin extends Plugin {
 				env.MDC_OLLAMA_MODEL = this.settings.ollamaModel.name;
 				env.MDC_TOGETHER_MODEL = this.settings.togetherModel.name;
 				env.MDC_GEMINI_MODEL = this.settings.geminiModel.name;
+				env.MDC_FIREWORKS_MODEL = this.settings.fireworksModel.name;
 			}
 
 			// Pass prompt settings as an environment variable

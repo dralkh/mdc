@@ -23,6 +23,9 @@ export interface Config {
   gemini_model: { // Added for Gemini
     name: string;
   };
+  fireworks_model: {
+    name: string;
+  };
   prompts: {
     extract_text_from_image: {
       prompt: string;

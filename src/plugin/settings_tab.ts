@@ -201,6 +201,7 @@ export class MDCSettingTab extends PluginSettingTab {
                     'together': 'Together AI',
                     'gemini': 'Google Gemini',
                     'ollama': 'Ollama (local)',
+                    'fireworks': 'Fireworks AI',
                 };
                 Object.entries(defaultProviders).forEach(([value, label]) => {
                     dropdown.addOption(value, label);
@@ -225,6 +226,30 @@ export class MDCSettingTab extends PluginSettingTab {
                 .setName('OpenAI API Key')
                 .addText(text => text.setValue(this.plugin.settings.openaiApiKey).onChange(async val => {
                     this.plugin.settings.openaiApiKey = val; await this.plugin.saveSettings();
+                }));
+        } else if (provider === 'openrouter') {
+            new Setting(container)
+                .setName('OpenRouter API Key')
+                .addText(text => text.setValue(this.plugin.settings.openrouterApiKey).onChange(async val => {
+                    this.plugin.settings.openrouterApiKey = val; await this.plugin.saveSettings();
+                }));
+        } else if (provider === 'together') {
+            new Setting(container)
+                .setName('Together AI API Key')
+                .addText(text => text.setValue(this.plugin.settings.togetherApiKey).onChange(async val => {
+                    this.plugin.settings.togetherApiKey = val; await this.plugin.saveSettings();
+                }));
+        } else if (provider === 'gemini') {
+            new Setting(container)
+                .setName('Gemini API Key')
+                .addText(text => text.setValue(this.plugin.settings.geminiApiKey).onChange(async val => {
+                    this.plugin.settings.geminiApiKey = val; await this.plugin.saveSettings();
+                }));
+        } else if (provider === 'fireworks') {
+            new Setting(container)
+                .setName('Fireworks API Key')
+                .addText(text => text.setValue(this.plugin.settings.fireworksApiKey).onChange(async val => {
+                    this.plugin.settings.fireworksApiKey = val; await this.plugin.saveSettings();
                 }));
         }
         
@@ -256,6 +281,8 @@ export class MDCSettingTab extends PluginSettingTab {
             new Setting(container).setName('Gemini Model').addText(text => text.setValue(this.plugin.settings.geminiModel.name).onChange(async val => { this.plugin.settings.geminiModel.name = val; await this.plugin.saveSettings(); }));
         } else if (provider === 'ollama') {
             new Setting(container).setName('Ollama Model').addText(text => text.setValue(this.plugin.settings.ollamaModel.name).onChange(async val => { this.plugin.settings.ollamaModel.name = val; await this.plugin.saveSettings(); }));
+        } else if (provider === 'fireworks') {
+            new Setting(container).setName('Fireworks AI Model').addText(text => text.setValue(this.plugin.settings.fireworksModel.name).onChange(async val => { this.plugin.settings.fireworksModel.name = val; await this.plugin.saveSettings(); }));
         }
 
 
