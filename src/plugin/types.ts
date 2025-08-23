@@ -9,6 +9,7 @@ export interface OpenAICompatibleProvider {
 	apiKey: string;
 	baseURL: string;
 	model: string;
+	requestsPerMinute: number;
 }
 
 export interface MDCPromptParameters {
@@ -40,6 +41,7 @@ export interface MDCPluginSettings {
 	openaiApiKey: string;     // Separate API key for OpenAI
 	togetherApiKey: string;   // API key for Together AI
 	geminiApiKey: string;     // API key for Gemini
+	requestsPerMinute: number;
 
 	
 
@@ -93,6 +95,7 @@ export const DEFAULT_SETTINGS: MDCPluginSettings = {
 	openaiApiKey: '',
 	togetherApiKey: '', // Added for Together AI
 	geminiApiKey: '',   // Added for Gemini
+	requestsPerMinute: 60,
 
 	
 

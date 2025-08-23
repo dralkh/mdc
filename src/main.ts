@@ -73,6 +73,7 @@ import {
   sleep
 } from './utils';
 import { DEFAULT_REQUESTS_PER_SECOND, SLEEP_TIME } from './processing/constants';
+import pLimit from 'p-limit';
 
 // Load .env file
 dotenv.config();
@@ -197,6 +198,23 @@ export async function main(): Promise<void> {
     process.exit(1);
   }
 
+ // Override prompts if provided by environment variable
+ const promptsOverride = getEnvVariable('MDC_PROMPTS_OVERRIDE');
+ if (promptsOverride) {
+   try {
+     const overriddenPrompts = JSON.parse(promptsOverride);
+     extractTextFromImagePrompt = overriddenPrompts.extractTextFromImage.prompt;
+     extractTextFromImageParameters = overriddenPrompts.extractTextFromImage.parameters;
+     extractMarkdownFromTextPrompt = overriddenPrompts.extractMarkdownFromText.prompt;
+     extractMarkdownFromTextParameters = overriddenPrompts.extractMarkdownFromText.parameters;
+     extractTocFromMarkdownPrompt = overriddenPrompts.extractTocFromMarkdown.prompt;
+     extractTocFromMarkdownParameters = overriddenPrompts.extractTocFromMarkdown.parameters;
+     console.log('✅ Loaded prompts from plugin settings override.');
+   } catch (e) {
+     console.error('❌ Failed to parse prompts override from environment variable.', e);
+   }
+ }
+
   // Set up command-line interface
   program
     .name('mdc')
@@ -217,6 +235,7 @@ export async function main(): Promise<void> {
     .option('--config <path>', 'Optional: Path to custom config.yaml file')
     .option('--identical-image-threshold <number>', 'Threshold for discarding identical images during PDF media extraction') // New option
     .option('--verbose', 'Enable verbose output, creating intermediate files') // New verbose option
+    .option('--requests-per-minute <number>', 'Maximum number of API calls per minute')
     .action(async (inputFile, options) => {
       const verbose = options.verbose || (config.processing_settings && config.processing_settings.verboseOutput) || false;
       let convertedPdfPathForCleanup: string | null = null; // For PPTX -> PDF temp file
@@ -362,7 +381,14 @@ export async function main(): Promise<void> {
         }
         
         // Calculate time between requests to evenly distribute them
-        timeBetweenRequests = 1000 / requestsPerSecond; // Convert to milliseconds
+        if (options.requestsPerMinute) {
+          const rpm = parseInt(options.requestsPerMinute, 10);
+          if (!isNaN(rpm) && rpm > 0) {
+            timeBetweenRequests = 60000 / rpm;
+          }
+        } else {
+          timeBetweenRequests = 1000 / requestsPerSecond; // Convert to milliseconds
+        }
         
         // Determine if the input file needs to be converted to PPTX or compressed
         const fileExt = path.extname(filePath).toLowerCase();
@@ -792,75 +818,25 @@ export async function main(): Promise<void> {
               console.log(`📊 Created ${chunks.length} optimized chunks based on token counts`);
 
               // Process each chunk
-              const processedChunks: string[] = [];
-
-              for (let idx = 0; idx < chunks.length; idx++) {
-                const chunk = chunks[idx];
-
+              const limit = pLimit(Math.ceil(1000 / timeBetweenRequests));
+              const chunkPromises = chunks.map((chunk, idx) => limit(async () => {
                 console.log(`🔄 Processing chunk ${idx + 1}/${chunks.length} (approx. ${estimateTokenCount(chunk)} tokens)`);
-
-                // Apply rate limiting between chunk processing
-                if (idx > 0) { // Don't wait before the first request
-                  await sleep(timeBetweenRequests);
-                }
-
-                // Use the appropriate API for markdown extraction
                 let markdownChunk: string | null;
-
                 if (apiProvider === 'openai') {
-                  markdownChunk = await openaiExtractMarkdownFromText(
-                    chunk,
-                    `${baseFilename}_part${idx + 1}`,
-                    apiKey,
-                    OPENAI_MODEL_NAME,
-                    extractMarkdownFromTextPrompt,
-                    extractMarkdownFromTextParameters,
-                    OPENAI_BASE_URL
-                  );
+                  markdownChunk = await openaiExtractMarkdownFromText(chunk, `${baseFilename}_part${idx + 1}`, apiKey, OPENAI_MODEL_NAME, extractMarkdownFromTextPrompt, extractMarkdownFromTextParameters, OPENAI_BASE_URL);
                 } else if (apiProvider === 'ollama') {
-                  markdownChunk = await ollamaExtractMarkdownFromText(
-                    chunk,
-                    `${baseFilename}_part${idx + 1}`,
-                    apiKey,
-                    OLLAMA_MODEL_NAME,
-                    extractMarkdownFromTextPrompt,
-                    extractMarkdownFromTextParameters
-                  );
-                } else if (apiProvider === 'together') { // Added Together AI
-                  markdownChunk = await extractMarkdownFromTextTogetherAI(
-                    chunk,
-                    `${baseFilename}_part${idx + 1}`,
-                    apiKey,
-                    TOGETHER_MODEL_NAME,
-                    extractMarkdownFromTextPrompt,
-                    extractMarkdownFromTextParameters
-                  );
+                  markdownChunk = await ollamaExtractMarkdownFromText(chunk, `${baseFilename}_part${idx + 1}`, apiKey, OLLAMA_MODEL_NAME, extractMarkdownFromTextPrompt, extractMarkdownFromTextParameters);
+                } else if (apiProvider === 'together') {
+                  markdownChunk = await extractMarkdownFromTextTogetherAI(chunk, `${baseFilename}_part${idx + 1}`, apiKey, TOGETHER_MODEL_NAME, extractMarkdownFromTextPrompt, extractMarkdownFromTextParameters);
                 } else if (apiProvider === 'gemini') {
-                  markdownChunk = await extractMarkdownFromTextGemini(
-                    chunk,
-                    `${baseFilename}_part${idx + 1}`,
-                    apiKey,
-                    GEMINI_MODEL_NAME,
-                    extractMarkdownFromTextPrompt,
-                    extractMarkdownFromTextParameters
-                  );
-                } else { // Default to OpenRouter
-                  markdownChunk = await openrouterExtractMarkdownFromText(
-                    chunk,
-                    `${baseFilename}_part${idx + 1}`,
-                    apiKey,
-                    OPENROUTER_MODEL_NAME,
-                    extractMarkdownFromTextPrompt,
-                    extractMarkdownFromTextParameters
-                  );
-                }
-
-                if (markdownChunk) {
-                  processedChunks.push(markdownChunk);
+                    markdownChunk = await extractMarkdownFromTextGemini(chunk, `${baseFilename}_part${idx + 1}`, apiKey, GEMINI_MODEL_NAME, extractMarkdownFromTextPrompt, extractMarkdownFromTextParameters);
                 } else {
-                  console.warn(`⚠️ Failed to process chunk ${idx + 1}.`);
+                  markdownChunk = await openrouterExtractMarkdownFromText(chunk, `${baseFilename}_part${idx + 1}`, apiKey, OPENROUTER_MODEL_NAME, extractMarkdownFromTextPrompt, extractMarkdownFromTextParameters);
                 }
-              }
+                if (!markdownChunk) console.warn(`⚠️ Failed to process chunk ${idx + 1}.`);
+                return markdownChunk;
+              }));
+              const processedChunks = (await Promise.all(chunkPromises)).filter(c => c !== null) as string[];
 
               // Combine all processed markdown chunks into final markdown
               finalMarkdown = combineChunks(processedChunks);
@@ -868,66 +844,23 @@ export async function main(): Promise<void> {
               // Fall back to the original method if token counts weren't calculated
               console.log('📄 Using character-based estimation for chunking...');
               const textChunks = splitTextIntoChunks(allTextForMarkdown, tokenLimit);
-              const processedChunks: string[] = [];
-
-              for (let idx = 0; idx < textChunks.length; idx++) {
-                const chunk = textChunks[idx];
-
+              const limit = pLimit(Math.ceil(1000 / timeBetweenRequests));
+              const chunkPromises = textChunks.map((chunk, idx) => limit(async () => {
                 console.log(`🔄 Processing chunk ${idx + 1}/${textChunks.length}`);
-
-                // Apply rate limiting between chunk processing
-                if (idx > 0) { // Don't wait before the first request
-                  await sleep(timeBetweenRequests);
-                }
-
-                // Use the appropriate API for markdown extraction
                 let markdownChunk: string | null;
-
                 if (apiProvider === 'openai') {
-                  markdownChunk = await openaiExtractMarkdownFromText(
-                    chunk,
-                    `${baseFilename}_part${idx + 1}`,
-                    apiKey,
-                    OPENAI_MODEL_NAME,
-                    extractMarkdownFromTextPrompt,
-                    extractMarkdownFromTextParameters,
-                    OPENAI_BASE_URL
-                  );
+                  markdownChunk = await openaiExtractMarkdownFromText(chunk, `${baseFilename}_part${idx + 1}`, apiKey, OPENAI_MODEL_NAME, extractMarkdownFromTextPrompt, extractMarkdownFromTextParameters, OPENAI_BASE_URL);
                 } else if (apiProvider === 'ollama') {
-                  markdownChunk = await ollamaExtractMarkdownFromText(
-                    chunk,
-                    `${baseFilename}_part${idx + 1}`,
-                    apiKey,
-                    OLLAMA_MODEL_NAME,
-                    extractMarkdownFromTextPrompt,
-                    extractMarkdownFromTextParameters
-                  );
-                } else if (apiProvider === 'together') { // Added Together AI
-                  markdownChunk = await extractMarkdownFromTextTogetherAI(
-                    chunk,
-                    `${baseFilename}_part${idx + 1}`,
-                    apiKey,
-                    TOGETHER_MODEL_NAME,
-                    extractMarkdownFromTextPrompt,
-                    extractMarkdownFromTextParameters
-                  );
-                } else { // Default to OpenRouter
-                  markdownChunk = await openrouterExtractMarkdownFromText(
-                    chunk,
-                    `${baseFilename}_part${idx + 1}`,
-                    apiKey,
-                    OPENROUTER_MODEL_NAME,
-                    extractMarkdownFromTextPrompt,
-                    extractMarkdownFromTextParameters
-                  );
-                }
-
-                if (markdownChunk) {
-                  processedChunks.push(markdownChunk);
+                  markdownChunk = await ollamaExtractMarkdownFromText(chunk, `${baseFilename}_part${idx + 1}`, apiKey, OLLAMA_MODEL_NAME, extractMarkdownFromTextPrompt, extractMarkdownFromTextParameters);
+                } else if (apiProvider === 'together') {
+                  markdownChunk = await extractMarkdownFromTextTogetherAI(chunk, `${baseFilename}_part${idx + 1}`, apiKey, TOGETHER_MODEL_NAME, extractMarkdownFromTextPrompt, extractMarkdownFromTextParameters);
                 } else {
-                  console.warn(`⚠️ Failed to process chunk ${idx + 1}.`);
+                  markdownChunk = await openrouterExtractMarkdownFromText(chunk, `${baseFilename}_part${idx + 1}`, apiKey, OPENROUTER_MODEL_NAME, extractMarkdownFromTextPrompt, extractMarkdownFromTextParameters);
                 }
-              }
+                if (!markdownChunk) console.warn(`⚠️ Failed to process chunk ${idx + 1}.`);
+                return markdownChunk;
+              }));
+              const processedChunks = (await Promise.all(chunkPromises)).filter(c => c !== null) as string[];
 
               // Combine all processed markdown chunks into final markdown
               finalMarkdown = combineChunks(processedChunks);
@@ -937,8 +870,6 @@ export async function main(): Promise<void> {
             finalMarkdown = cleanMarkdownCodeBlocks(finalMarkdown);
           } else {
             // Proceed to send the text to the AI for Markdown conversion without token splitting
-            await sleep(timeBetweenRequests); // Wait before making the API call
-
             // Use the appropriate API for markdown extraction
             let markdown: string | null;
 

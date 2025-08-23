@@ -277,6 +277,9 @@ export default class MDCIntegrationPlugin extends Plugin {
 				command += ` --identical-image-threshold ${this.settings.identicalImageThreshold}`;
 			}
 
+			// Add requests per minute
+			command += ` --requests-per-minute ${this.settings.requestsPerMinute}`;
+
 			// The --config flag is no longer added here.
 			// The CLI will use its default config loading logic (which expects config.yaml in the plugin root).
 			// For overriding prompts, a different mechanism (like a temporary config file) will be implemented later if needed.
@@ -318,6 +321,9 @@ export default class MDCIntegrationPlugin extends Plugin {
 				env.MDC_TOGETHER_MODEL = this.settings.togetherModel.name;
 				env.MDC_GEMINI_MODEL = this.settings.geminiModel.name;
 			}
+
+			// Pass prompt settings as an environment variable
+			env.MDC_PROMPTS_OVERRIDE = JSON.stringify(this.settings.prompts);
 
 			// Execute the command with the environment variables and set working directory
 			// Set working directory to the plugin directory so config.yaml can be found

@@ -67,145 +67,70 @@ export async function extractRenderedImagesFromPdf(
   timeBetweenRequests: number
 ): Promise<{ imgPath: string, result: string, tokenCount: number }[]> {
   try {
-    // Import findExecutablePath and estimateTokenCount from utils
-    const { findExecutablePath, estimateTokenCount, sleep } = await import('../utils');
-
-    // Ensure directory exists
+    const { findExecutablePath, estimateTokenCount } = await import('../utils');
     await fs.ensureDir(renderedDir);
 
-    const processedImages: { imgPath: string, result: string, tokenCount: number }[] = [];
-
-    // Find pdfinfo executable
     const pdfinfoPath = await findExecutablePath('pdfinfo', 'PDFINFO_PATH');
-
     if (!pdfinfoPath) {
       console.error("❌ The 'pdfinfo' tool was not found. Please install poppler-utils and add it to your PATH or set PDFINFO_PATH environment variable.");
       return [];
     }
 
-    // Extract PDF info to get page count
     const pdfInfo = await new Promise<string>((resolve, reject) => {
       const pdfinfo = spawn(pdfinfoPath, [pdfPath]);
       let output = '';
-
-      pdfinfo.stdout.on('data', (data) => {
-        output += data.toString();
-      });
-
-      pdfinfo.on('close', (code) => {
-        if (code === 0) {
-          resolve(output);
-        } else {
-          reject(new Error(`pdfinfo process exited with code ${code}`));
-        }
-      });
-
-      pdfinfo.on('error', (err) => {
-        reject(err);
-      });
+      pdfinfo.stdout.on('data', (data) => { output += data.toString(); });
+      pdfinfo.on('close', (code) => code === 0 ? resolve(output) : reject(new Error(`pdfinfo process exited with code ${code}`)));
+      pdfinfo.on('error', (err) => reject(err));
     });
 
-    // Parse page count from pdfinfo output
     const pageCountMatch = pdfInfo.match(/Pages:\s*(\d+)/);
     const pageCount = pageCountMatch ? parseInt(pageCountMatch[1], 10) : 0;
-
     if (pageCount === 0) {
       console.warn("⚠️ No pages found in PDF or could not determine page count.");
       return [];
     }
 
-    // Find pdftocairo executable
     const pdftocairoPath = await findExecutablePath('pdftocairo', 'PDFTOCAIRO_PATH');
-
     if (!pdftocairoPath) {
       console.error("❌ The 'pdftocairo' tool was not found. Please install poppler-utils and add it to your PATH or set PDFTOCAIRO_PATH environment variable.");
       return [];
     }
 
-    // Limit concurrency for image rendering
-    const renderLimit = pLimit(4); // Limit to 4 concurrent rendering operations
+    const requestsPerSecond = 1000 / timeBetweenRequests;
+    const limit = pLimit(Math.ceil(requestsPerSecond));
 
-    // Create an array of promises for each page rendering and processing
-    const pagePromises = [];
-    for (let pageNum = 0; pageNum < pageCount; pageNum++) {
-      pagePromises.push(renderLimit(async () => {
-        try {
-          // Use pdftocairo to convert PDF page to image
-          const tempPngPath = path.join(renderedDir, `${baseFilename}-${pageNum + 1}-temp.png`);
+    const pagePromises = Array.from({ length: pageCount }, (_, i) => limit(async () => {
+      const pageNum = i + 1;
+      try {
+        const tempPngPath = path.join(renderedDir, `${baseFilename}-${pageNum}-temp.png`);
+        await new Promise<void>((resolve, reject) => {
+          const pdftocairo = spawn(pdftocairoPath, ['-png', '-singlefile', '-f', String(pageNum), '-l', String(pageNum), '-r', '200', pdfPath, path.join(renderedDir, `${baseFilename}-${pageNum}-temp`)]);
+          pdftocairo.on('close', (code) => code === 0 ? resolve() : reject(new Error(`pdftocairo process exited with code ${code}`)));
+          pdftocairo.on('error', (err) => reject(err));
+        });
 
-          await new Promise<void>((resolve, reject) => {
-            const pdftocairo = spawn(pdftocairoPath, [
-              '-png',
-              '-singlefile',
-              '-f', (pageNum + 1).toString(),
-              '-l', (pageNum + 1).toString(),
-              '-r', '200',  // DPI
-              pdfPath,
-              path.join(renderedDir, `${baseFilename}-${pageNum + 1}-temp`)
-            ]);
+        const renderedFilename = `${baseFilename}-${pageNum}.webp`;
+        const renderedPath = path.join(renderedDir, renderedFilename);
+        await sharp(tempPngPath).webp({ quality: 80 }).toFile(renderedPath);
+        await fs.remove(tempPngPath);
+        console.log(`  ➡️ Rendered Page ${pageNum} to Image: ${renderedFilename}`);
 
-            pdftocairo.on('close', (code) => {
-              if (code === 0) {
-                resolve();
-              } else {
-                reject(new Error(`pdftocairo process exited with code ${code}`));
-              }
-            });
+        console.log(`  🧠 Sending rendered image ${renderedFilename} to AI for processing...`);
+        const result = await processImageFn(renderedPath, apiKey, modelName, prompt, parameters, apiProvider);
+        const tokenCount = result ? estimateTokenCount(result) : 0;
+        if (result) console.log(`  📊 Estimated ${tokenCount} tokens for ${renderedFilename}`);
+        
+        return { imgPath: renderedPath, result, tokenCount };
+      } catch (e) {
+        const error = e instanceof Error ? e : new Error(String(e));
+        console.error(`⚠️ Error rendering and processing page ${pageNum}: ${error.message}`);
+        return null;
+      }
+    }));
 
-            pdftocairo.on('error', (err) => {
-              reject(err);
-            });
-          });
-
-          // Define final webp file path
-          const renderedFilename = `${baseFilename}-${pageNum + 1}.webp`;
-          const renderedPath = path.join(renderedDir, renderedFilename);
-
-          // Convert to WebP using sharp
-          await sharp(tempPngPath)
-            .webp({ quality: 80 })
-            .toFile(renderedPath);
-
-          // Clean up temp file
-          await fs.remove(tempPngPath);
-
-          console.log(`  ➡️ Rendered Page ${pageNum + 1} to Image: ${renderedFilename}`);
-
-          // --- AI Processing Immediately After Rendering ---
-          console.log(`  🧠 Sending rendered image ${renderedFilename} to AI for processing...`);
-
-          // Apply rate limiting before sending to AI
-          await sleep(timeBetweenRequests);
-
-          const result = await processImageFn(
-            renderedPath,
-            apiKey,
-            modelName,
-            prompt,
-            parameters,
-            apiProvider
-          );
-
-          let tokenCount = 0;
-          if (result) {
-            tokenCount = estimateTokenCount(result);
-            console.log(`  📊 Estimated ${tokenCount} tokens for ${renderedFilename}`);
-          }
-
-          return { imgPath: renderedPath, result, tokenCount }; // Return object with results
-        } catch (e) {
-          const error = e instanceof Error ? e : new Error(String(e));
-          console.error(`⚠️ Error rendering and processing page ${pageNum + 1}: ${error.message}`);
-          return null; // Return null on error
-        }
-      }));
-    }
-
-    // Wait for all page rendering and processing promises to settle
     const results = await Promise.all(pagePromises);
-    const successfulProcessedImages = results.filter(item => item !== null) as { imgPath: string, result: string, tokenCount: number }[];
-
-    return successfulProcessedImages;
+    return results.filter(item => item !== null) as { imgPath: string, result: string, tokenCount: number }[];
   } catch (error) {
     const err = error instanceof Error ? error : new Error(String(error));
     console.error(`⚠️ Error in extractRenderedImagesFromPdf: ${err.message}`);

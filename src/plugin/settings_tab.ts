@@ -11,7 +11,7 @@ class ProviderModal extends Modal {
     constructor(app: App, provider: OpenAICompatibleProvider | null, onSave: (provider: OpenAICompatibleProvider) => void) {
         super(app);
         this.isNew = provider === null;
-        this.provider = provider || { id: uuidv4(), name: '', apiKey: '', baseURL: '', model: '' };
+        this.provider = provider || { id: uuidv4(), name: '', apiKey: '', baseURL: '', model: '', requestsPerMinute: 60 };
         this.onSave = onSave;
     }
 
@@ -52,6 +52,15 @@ class ProviderModal extends Modal {
                 .setPlaceholder('e.g., gpt-4o-mini')
                 .setValue(this.provider.model)
                 .onChange(value => this.provider.model = value));
+        
+        new Setting(contentEl)
+            .setName('Requests per Minute')
+            .setDesc('The maximum number of API calls to make per minute.')
+            .addSlider(slider => slider
+                .setLimits(1, 300, 1)
+                .setValue(this.provider.requestsPerMinute)
+                .setDynamicTooltip()
+                .onChange(value => this.provider.requestsPerMinute = value));
 
         new Setting(contentEl)
             .addButton(button => button
@@ -217,24 +226,21 @@ export class MDCSettingTab extends PluginSettingTab {
                 .addText(text => text.setValue(this.plugin.settings.openaiApiKey).onChange(async val => {
                     this.plugin.settings.openaiApiKey = val; await this.plugin.saveSettings();
                 }));
-        } else if (provider === 'openrouter') {
-             new Setting(container)
-                .setName('OpenRouter API Key')
-                .addText(text => text.setValue(this.plugin.settings.openrouterApiKey).onChange(async val => {
-                    this.plugin.settings.openrouterApiKey = val; await this.plugin.saveSettings();
-                }));
-        } else if (provider === 'together') {
-             new Setting(container)
-                .setName('Together AI API Key')
-                .addText(text => text.setValue(this.plugin.settings.togetherApiKey).onChange(async val => {
-                    this.plugin.settings.togetherApiKey = val; await this.plugin.saveSettings();
-                }));
-        } else if (provider === 'gemini') {
-             new Setting(container)
-                .setName('Gemini API Key')
-                .addText(text => text.setValue(this.plugin.settings.geminiApiKey).onChange(async val => {
-                    this.plugin.settings.geminiApiKey = val; await this.plugin.saveSettings();
-                }));
+        }
+        
+        // Rate Limiting
+        if (provider === 'openai' || this.plugin.settings.customOpenAIProviders.some(p => p.id === provider)) {
+            new Setting(container)
+                .setName('Requests per Minute')
+                .setDesc('The maximum number of API calls to make per minute.')
+                .addSlider(slider => slider
+                    .setLimits(1, 300, 1)
+                    .setValue(this.plugin.settings.requestsPerMinute)
+                    .setDynamicTooltip()
+                    .onChange(async (value) => {
+                        this.plugin.settings.requestsPerMinute = value;
+                        await this.plugin.saveSettings();
+                    }));
         }
         
         // Show model name fields
@@ -374,6 +380,9 @@ export class MDCSettingTab extends PluginSettingTab {
   container.createEl('p', {
    text: 'Configure the prompts used for different tasks. These will override the config.yaml defaults.'
   });
+
+  const disclaimer = container.createEl('p', { cls: 'setting-item-description' });
+  disclaimer.innerHTML = `<strong>Note:</strong> Support for advanced parameters (e.g., penalties, Top K) may vary across different AI models and API providers. When using a custom OpenAI-compatible provider, please consult its documentation for compatibility details.`;
 
   // Function to create prompt settings section
   const createPromptSettings = (

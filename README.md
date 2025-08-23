@@ -207,6 +207,7 @@ npm run mdc -- "document.docx" --md --config "./custom-config.yaml" --api gemini
 - `--api <provider>` - API provider to use (openrouter, openai, ollama, together, or gemini) (default: "openrouter")
 - `--api-key, -k <key>` - API key for the selected provider
 - `--token <limit>` - Maximum number of tokens per chunk for processing
+- `--requests-per-minute <number>` - Maximum number of API calls per minute
 
 ### Processing Options
 - `--ma` - Include attachments extraction and processing
