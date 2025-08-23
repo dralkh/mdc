@@ -668,3 +668,287 @@ export async function extractRenderedImagesFromPptx(
   );
   return processedRenderedImages;
 }
+
+/**
+ * Performs second-pass artifact detection on images using AI analysis.
+ * Analyzes images after basic filtering to identify artifacts vs valuable content.
+ * Returns structured JSON responses with classification and confidence scores.
+ *
+ * @param imagePaths - Array of image file paths to analyze
+ * @param apiKey - API key for the selected provider
+ * @param modelName - Name of the AI model to use
+ * @param prompt - Specialized artifact detection prompt
+ * @param parameters - Parameters for the API call
+ * @param apiProvider - API provider ('openrouter', 'openai', 'ollama', 'together', 'gemini', 'fireworks')
+ * @param confidenceThreshold - Minimum confidence score to keep an image (0.0-1.0)
+ * @param maxConcurrency - Maximum number of concurrent API requests
+ * @param timeBetweenRequests - Time to wait between API requests for rate limiting
+ * @returns Object containing filtered image paths and detection results
+ */
+export async function detectArtifactsInImages(
+  imagePaths: string[],
+  apiKey: string,
+  modelName: string,
+  prompt: string,
+  parameters: Record<string, any>,
+  apiProvider: 'openrouter' | 'openai' | 'ollama' | 'together' | 'gemini' | 'fireworks',
+  confidenceThreshold: number = 0.7,
+  maxConcurrency: number = 4,
+  timeBetweenRequests: number = 1000
+): Promise<{
+  filteredImagePaths: string[];
+  detectionResults: Array<{
+    imagePath: string;
+    isArtifact: boolean;
+    confidence: number;
+    artifactType?: string;
+    reasoning?: string;
+    recommendation?: 'keep' | 'discard';
+  }>;
+  statistics: {
+    totalImages: number;
+    artifactsDetected: number;
+    valuableContent: number;
+    averageConfidence: number;
+  };
+}> {
+  try {
+    console.log(`🔍 Starting second-pass artifact detection for ${imagePaths.length} images...`);
+    console.log(`📊 Using confidence threshold: ${confidenceThreshold}, max concurrency: ${maxConcurrency}`);
+
+    // Import required modules
+    const { getDataUrl } = await import('../utils');
+    const { parseArtifactDetectionResponse, shouldKeepImage } = await import('../types/artifact_detection');
+
+    // Initialize statistics
+    const statistics = {
+      totalImages: imagePaths.length,
+      artifactsDetected: 0,
+      valuableContent: 0,
+      averageConfidence: 0
+    };
+
+    const detectionResults: Array<{
+      imagePath: string;
+      isArtifact: boolean;
+      confidence: number;
+      artifactType?: string;
+      reasoning?: string;
+      recommendation?: 'keep' | 'discard';
+    }> = [];
+
+    // If no images to process, return early
+    if (imagePaths.length === 0) {
+      console.log("ℹ️ No images to analyze for artifacts.");
+      return {
+        filteredImagePaths: [],
+        detectionResults: [],
+        statistics
+      };
+    }
+
+    // Set up concurrency limiting
+    const requestsPerSecond = 1000 / timeBetweenRequests;
+    const limit = pLimit(Math.min(maxConcurrency, Math.ceil(requestsPerSecond)));
+
+    // Import the appropriate artifact detection function based on API provider
+    let detectArtifactsFn: (dataUrl: string, apiKey: string, modelName: string, prompt: string, parameters: Record<string, any>) => Promise<any>;
+    
+    switch (apiProvider) {
+      case 'openai':
+        const { detectArtifactsInImage: detectArtifactsOpenAI } = await import('../api/openai_api');
+        detectArtifactsFn = detectArtifactsOpenAI;
+        break;
+      case 'openrouter':
+        const { detectArtifactsInImage: detectArtifactsOpenRouter } = await import('../api/openrouter_api');
+        detectArtifactsFn = detectArtifactsOpenRouter;
+        break;
+      case 'ollama':
+        const { detectArtifactsInImage: detectArtifactsOllama } = await import('../api/ollama_api');
+        detectArtifactsFn = detectArtifactsOllama;
+        break;
+      case 'together':
+        const { detectArtifactsInImageTogetherAI } = await import('../api/together_api');
+        detectArtifactsFn = detectArtifactsInImageTogetherAI;
+        break;
+      case 'gemini':
+        const { detectArtifactsInImageGemini } = await import('../api/gemini_api');
+        detectArtifactsFn = detectArtifactsInImageGemini;
+        break;
+      case 'fireworks':
+        const { detectArtifactsInImage: detectArtifactsFireworks } = await import('../api/fireworks_api');
+        detectArtifactsFn = detectArtifactsFireworks;
+        break;
+      default:
+        throw new Error(`Unsupported API provider: ${apiProvider}`);
+    }
+
+    // Process each image for artifact detection
+    const detectionPromises = imagePaths.map(imagePath => limit(async () => {
+      try {
+        console.log(`  🔍 Analyzing image for artifacts: ${path.basename(imagePath)}`);
+        
+        // Convert image to data URL for API processing
+        const dataUrl = await getDataUrl(imagePath);
+        
+        if (!dataUrl) {
+          console.warn(`  ⚠️ Failed to convert image to data URL: ${path.basename(imagePath)}`);
+          // Default to keeping the image if conversion fails
+          return {
+            imagePath,
+            isArtifact: false,
+            confidence: 0.5,
+            artifactType: 'unknown',
+            reasoning: 'Image conversion failed - defaulting to keep',
+            recommendation: 'keep' as const
+          };
+        }
+        
+        // Call the artifact detection API
+        const response = await detectArtifactsFn(dataUrl, apiKey, modelName, prompt, parameters);
+        
+        if (!response) {
+          console.warn(`  ⚠️ No response from artifact detection API for ${path.basename(imagePath)}`);
+          // Default to keeping the image if detection fails
+          return {
+            imagePath,
+            isArtifact: false,
+            confidence: 0.5,
+            artifactType: 'unknown',
+            reasoning: 'Detection failed - defaulting to keep',
+            recommendation: 'keep' as const
+          };
+        }
+
+        // The response should already be parsed as ArtifactDetectionResponse
+        const parsedResponse = response;
+        
+        // Determine if we should keep the image based on detection results
+        const shouldKeep = shouldKeepImage(parsedResponse, confidenceThreshold);
+        
+        const detectionResult = {
+          imagePath,
+          isArtifact: parsedResponse.is_artifact,
+          confidence: parsedResponse.confidence,
+          artifactType: parsedResponse.artifact_type,
+          reasoning: parsedResponse.reason,
+          recommendation: (shouldKeep ? 'keep' : 'discard') as 'keep' | 'discard'
+        };
+
+        // Log the result
+        const statusIcon = shouldKeep ? '✅' : '🗑️';
+        const statusText = shouldKeep ? 'KEEP' : 'DISCARD';
+        const confidence = parsedResponse.confidence !== undefined ? parsedResponse.confidence.toFixed(2) : 'undefined';
+        console.log(`  ${statusIcon} ${path.basename(imagePath)}: ${statusText} (${parsedResponse.artifact_type}, confidence: ${confidence})`);
+        
+        if (parsedResponse.reason) {
+          console.log(`    💡 Reasoning: ${parsedResponse.reason.substring(0, 100)}...`);
+        }
+
+        return detectionResult;
+        
+      } catch (error) {
+        const err = error instanceof Error ? error : new Error(String(error));
+        console.error(`  ❌ Error detecting artifacts in ${path.basename(imagePath)}: ${err.message}`);
+        
+        // Default to keeping the image if an error occurs
+        return {
+          imagePath,
+          isArtifact: false,
+          confidence: 0.5,
+          artifactType: 'error',
+          reasoning: `Detection error: ${err.message}`,
+          recommendation: 'keep' as const
+        };
+      }
+    }));
+
+    // Wait for all detection promises to complete
+    const results = await Promise.all(detectionPromises);
+    detectionResults.push(...results);
+
+    // Calculate statistics
+    let totalConfidence = 0;
+    let validConfidenceCount = 0;
+
+    for (const result of detectionResults) {
+      if (result.recommendation === 'discard') {
+        statistics.artifactsDetected++;
+      } else {
+        statistics.valuableContent++;
+      }
+      
+      if (result.confidence > 0) {
+        totalConfidence += result.confidence;
+        validConfidenceCount++;
+      }
+    }
+
+    statistics.averageConfidence = validConfidenceCount > 0 ? totalConfidence / validConfidenceCount : 0;
+
+    // Filter image paths based on detection results
+    const filteredImagePaths = detectionResults
+      .filter(result => result.recommendation === 'keep')
+      .map(result => result.imagePath);
+
+    // Actually delete the files that are identified as artifacts
+    const artifactsToDelete = detectionResults
+      .filter(result => result.recommendation === 'discard')
+      .map(result => result.imagePath);
+
+    if (artifactsToDelete.length > 0) {
+      console.log(`🗑️ Deleting ${artifactsToDelete.length} artifact files...`);
+      
+      for (const artifactPath of artifactsToDelete) {
+        try {
+          if (fs.existsSync(artifactPath)) {
+            await fs.remove(artifactPath);
+            console.log(`  🗑️ Deleted artifact file: ${path.basename(artifactPath)}`);
+          } else {
+            console.warn(`  ⚠️ Artifact file not found: ${path.basename(artifactPath)}`);
+          }
+        } catch (error) {
+          const err = error instanceof Error ? error : new Error(String(error));
+          console.error(`  ❌ Failed to delete artifact file ${path.basename(artifactPath)}: ${err.message}`);
+        }
+      }
+    }
+
+    // Log summary statistics
+    console.log(`🎯 Artifact detection complete:`);
+    console.log(`   📊 Total images analyzed: ${statistics.totalImages}`);
+    console.log(`   🗑️ Artifacts detected: ${statistics.artifactsDetected}`);
+    console.log(`   ✅ Valuable content: ${statistics.valuableContent}`);
+    console.log(`   📈 Average confidence: ${statistics.averageConfidence.toFixed(2)}`);
+    console.log(`   🎯 Images remaining after filtering: ${filteredImagePaths.length}`);
+
+    return {
+      filteredImagePaths,
+      detectionResults,
+      statistics
+    };
+
+  } catch (error) {
+    const err = error instanceof Error ? error : new Error(String(error));
+    console.error(`❌ Error in detectArtifactsInImages: ${err.message}`);
+    
+    // On error, return all images as filtered (fail-safe)
+    return {
+      filteredImagePaths: imagePaths,
+      detectionResults: imagePaths.map(imagePath => ({
+        imagePath,
+        isArtifact: false,
+        confidence: 0.5,
+        artifactType: 'error',
+        reasoning: `System error: ${err.message}`,
+        recommendation: 'keep' as const
+      })),
+      statistics: {
+        totalImages: imagePaths.length,
+        artifactsDetected: 0,
+        valuableContent: imagePaths.length,
+        averageConfidence: 0.5
+      }
+    };
+  }
+}

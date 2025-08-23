@@ -1,5 +1,9 @@
 import axios from 'axios';
 import { retryWithBackoff } from '../utils';
+import {
+  ArtifactDetectionResponse,
+  parseArtifactDetectionResponse
+} from '../types/artifact_detection';
 
 interface RateLimitInfo {
   requests: number;
@@ -376,6 +380,100 @@ ${JSON.stringify(headings, null, 2)}
   } catch (e) {
     const error = e instanceof Error ? e : new Error(String(e));
     console.error(`⚠️ Error communicating with OpenRouter API for heading restructuring: ${error.message}`);
+    return null;
+  }
+}
+
+/**
+ * Sends an image to the OpenRouter API to detect if it's an artifact or valuable content.
+ * Returns structured JSON response with artifact detection results.
+ */
+export async function detectArtifactsInImage(
+  dataUrl: string,
+  apiKey: string,
+  modelName: string,
+  prompt: string,
+  parameters: Record<string, any>
+): Promise<ArtifactDetectionResponse | null> {
+  const headers = {
+    "Authorization": `Bearer ${apiKey}`,
+    "Content-Type": "application/json",
+  };
+  
+  const payload = {
+    model: modelName,
+    messages: [
+      {
+        role: "user",
+        content: [
+          {
+            type: "text",
+            text: prompt
+          },
+          {
+            type: "image_url",
+            image_url: {
+              url: dataUrl
+            }
+          }
+        ]
+      }
+    ],
+    ...parameters
+  };
+
+  // Define API request function for retry
+  const makeApiRequest = async () => {
+    const resp = await axios.post(
+      "https://openrouter.ai/api/v1/chat/completions",
+      payload,
+      { headers }
+    );
+    return resp;
+  };
+
+  try {
+    // Make the API call with retry
+    const response = await retryWithBackoff(makeApiRequest);
+    if (response === null) {
+      return null;
+    }
+    
+    if (response.status === 200) {
+      try {
+        const content = response.data.choices[0].message.content.trim();
+        if (!content) {
+          console.warn('⚠️ No content received from OpenRouter API for artifact detection');
+          return null;
+        }
+        
+        // Parse the JSON response
+        const parsedResponse = parseArtifactDetectionResponse(content);
+        if (!parsedResponse) {
+          console.warn('⚠️ Failed to parse artifact detection response from OpenRouter API');
+          console.warn('Raw response:', content);
+          return null;
+        }
+        
+        const confidence = parsedResponse.confidence !== undefined ? parsedResponse.confidence.toFixed(2) : 'undefined';
+        console.log(`  ✅ Artifact detection completed: ${parsedResponse.is_artifact ? 'Artifact' : 'Valuable'} (${confidence} confidence)`);
+        if (parsedResponse.content_analysis?.content_description) {
+          console.log(`  📝 Content: ${parsedResponse.content_analysis.content_description}`);
+        }
+        
+        return parsedResponse;
+      } catch (e) {
+        const error = e instanceof Error ? e : new Error(String(e));
+        console.error(`⚠️ Unexpected response format from OpenRouter API for artifact detection: ${error.message}`);
+        return null;
+      }
+    } else {
+      console.error(`⚠️ Artifact detection API request failed with status code ${response.status}: ${JSON.stringify(response.data)}`);
+      return null;
+    }
+  } catch (e) {
+    const error = e instanceof Error ? e : new Error(String(e));
+    console.error(`⚠️ Error communicating with OpenRouter API for artifact detection: ${error.message}`);
     return null;
   }
 }

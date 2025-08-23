@@ -6,6 +6,7 @@ import { program } from 'commander';
 import * as dotenv from 'dotenv';
 import * as crypto from 'crypto';
 import { spawn } from 'child_process';
+import sharp from 'sharp';
 
 import { loadConfig, getEnvVariable } from './config';
 import {
@@ -60,7 +61,8 @@ import {
   extractMediaImagesFromPptx,
   extractRenderedImagesFromPptx,
   extractMediaImagesFromPdf,
-  extractRenderedImagesFromPdf
+  extractRenderedImagesFromPdf,
+  detectArtifactsInImages
 } from './processing/image_processing';
 import {
   extractHeadingsWithWordCounts, // Changed from extractAllHeadings
@@ -196,6 +198,9 @@ export async function main(): Promise<void> {
   let extractMarkdownFromTextParameters: Record<string, any>;
   let extractTocFromMarkdownPrompt: string;
   let extractTocFromMarkdownParameters: Record<string, any>;
+  let artifactDetectionPrompt: string;
+  let artifactDetectionParameters: Record<string, any>;
+  let artifactDetectionConfig: any;
 
   try {
     extractTextFromImagePrompt = config.prompts.extract_text_from_image.prompt;
@@ -206,6 +211,90 @@ export async function main(): Promise<void> {
 
     extractTocFromMarkdownPrompt = config.prompts.extract_toc_from_markdown.prompt;
     extractTocFromMarkdownParameters = config.prompts.extract_toc_from_markdown.parameters;
+
+    // Load artifact detection configuration
+    artifactDetectionConfig = config.artifact_detection || {
+      enabled: false,
+      confidence_threshold: 0.7,
+      prompt: '',
+      parameters: {
+        temperature: 0.1,
+        top_p: 0.9,
+        frequency_penalty: 0,
+        presence_penalty: 0,
+        repetition_penalty: 1.0,
+        top_k: 40,
+        max_tokens: 500
+      },
+      processing: {
+        max_concurrent_requests: 4,
+        request_timeout: 30000,
+        retry_failed_requests: true,
+        max_retry_attempts: 3,
+        retry_delay: 1000
+      },
+      logging: {
+        enabled: true,
+        log_individual_results: true,
+        log_summary_statistics: true,
+        save_detailed_results: false,
+        results_file_path: './artifact_detection_results.json'
+      }
+    };
+
+    // Override artifact detection configuration with environment variables from plugin
+    if (getEnvVariable('MDC_ARTIFACT_DETECTION_ENABLED')) {
+      artifactDetectionConfig.enabled = getEnvVariable('MDC_ARTIFACT_DETECTION_ENABLED') === 'true';
+    }
+    if (getEnvVariable('MDC_ARTIFACT_DETECTION_CONFIDENCE_THRESHOLD')) {
+      const threshold = parseFloat(getEnvVariable('MDC_ARTIFACT_DETECTION_CONFIDENCE_THRESHOLD') || '0.7');
+      if (!isNaN(threshold)) {
+        artifactDetectionConfig.confidence_threshold = threshold;
+      }
+    }
+    if (getEnvVariable('MDC_ARTIFACT_DETECTION_MAX_CONCURRENT_REQUESTS')) {
+      const maxConcurrent = parseInt(getEnvVariable('MDC_ARTIFACT_DETECTION_MAX_CONCURRENT_REQUESTS') || '4');
+      if (!isNaN(maxConcurrent)) {
+        artifactDetectionConfig.processing.max_concurrent_requests = maxConcurrent;
+      }
+    }
+    if (getEnvVariable('MDC_ARTIFACT_DETECTION_REQUEST_TIMEOUT')) {
+      const timeout = parseInt(getEnvVariable('MDC_ARTIFACT_DETECTION_REQUEST_TIMEOUT') || '30000');
+      if (!isNaN(timeout)) {
+        artifactDetectionConfig.processing.request_timeout = timeout;
+      }
+    }
+    if (getEnvVariable('MDC_ARTIFACT_DETECTION_RETRY_FAILED_REQUESTS')) {
+      artifactDetectionConfig.processing.retry_failed_requests = getEnvVariable('MDC_ARTIFACT_DETECTION_RETRY_FAILED_REQUESTS') === 'true';
+    }
+    if (getEnvVariable('MDC_ARTIFACT_DETECTION_MAX_RETRY_ATTEMPTS')) {
+      const maxRetries = parseInt(getEnvVariable('MDC_ARTIFACT_DETECTION_MAX_RETRY_ATTEMPTS') || '3');
+      if (!isNaN(maxRetries)) {
+        artifactDetectionConfig.processing.max_retry_attempts = maxRetries;
+      }
+    }
+    if (getEnvVariable('MDC_ARTIFACT_DETECTION_RETRY_DELAY')) {
+      const retryDelay = parseInt(getEnvVariable('MDC_ARTIFACT_DETECTION_RETRY_DELAY') || '1000');
+      if (!isNaN(retryDelay)) {
+        artifactDetectionConfig.processing.retry_delay = retryDelay;
+      }
+    }
+    if (getEnvVariable('MDC_ARTIFACT_DETECTION_LOG_INDIVIDUAL_RESULTS')) {
+      artifactDetectionConfig.logging.log_individual_results = getEnvVariable('MDC_ARTIFACT_DETECTION_LOG_INDIVIDUAL_RESULTS') === 'true';
+    }
+    if (getEnvVariable('MDC_ARTIFACT_DETECTION_LOG_SUMMARY_STATISTICS')) {
+      artifactDetectionConfig.logging.log_summary_statistics = getEnvVariable('MDC_ARTIFACT_DETECTION_LOG_SUMMARY_STATISTICS') === 'true';
+    }
+    if (getEnvVariable('MDC_ARTIFACT_DETECTION_SAVE_DETAILED_RESULTS')) {
+      artifactDetectionConfig.logging.save_detailed_results = getEnvVariable('MDC_ARTIFACT_DETECTION_SAVE_DETAILED_RESULTS') === 'true';
+    }
+    if (getEnvVariable('MDC_ARTIFACT_DETECTION_RESULTS_FILE_PATH')) {
+      artifactDetectionConfig.logging.results_file_path = getEnvVariable('MDC_ARTIFACT_DETECTION_RESULTS_FILE_PATH') || './artifact_detection_results.json';
+    }
+
+    // Load artifact detection prompt
+    artifactDetectionPrompt = artifactDetectionConfig.prompt || '';
+    artifactDetectionParameters = artifactDetectionConfig.parameters;
   } catch (e) {
     const error = e instanceof Error ? e : new Error(String(e));
     console.error(`❌ Missing prompt or parameters in config.yaml: ${error.message}`);
@@ -250,6 +339,7 @@ export async function main(): Promise<void> {
     .option('--identical-image-threshold <number>', 'Threshold for discarding identical images during PDF media extraction') // New option
     .option('--verbose', 'Enable verbose output, creating intermediate files') // New verbose option
     .option('--requests-per-minute <number>', 'Maximum number of API calls per minute')
+    .option('--artifact-detection', 'Enable AI-powered artifact detection to filter out low-value images before text extraction')
     .action(async (inputFile, options) => {
       const verbose = options.verbose || (config.processing_settings && config.processing_settings.verboseOutput) || false;
       let convertedPdfPathForCleanup: string | null = null; // For PPTX -> PDF temp file
@@ -579,12 +669,107 @@ export async function main(): Promise<void> {
 
           // Now use the converted PDF for both attachment and rendered image extraction
           if (topicsAttachmentsDir) {
-            const identicalImageThreshold = options.identicalImageThreshold !== undefined 
-              ? parseInt(options.identicalImageThreshold, 10) 
+            const identicalImageThreshold = options.identicalImageThreshold !== undefined
+              ? parseInt(options.identicalImageThreshold, 10)
               : config.pdf_processing.identical_image_threshold;
             attachmentImages = await extractMediaImagesFromPdf(convertedPdf, topicsAttachmentsDir, baseFilename, identicalImageThreshold);
+            
+            // Apply artifact detection to attachment images if enabled
+            if (options.artifactDetection || artifactDetectionConfig.enabled) {
+              console.log('\n🔍 Running artifact detection on attachment images...');
+              const artifactDetectionResults = await detectArtifactsInImages(
+                attachmentImages,
+                apiKey,
+                apiProvider === 'openai' ? OPENAI_MODEL_NAME : (apiProvider === 'ollama' ? OLLAMA_MODEL_NAME : (apiProvider === 'together' ? TOGETHER_MODEL_NAME : (apiProvider === 'gemini' ? GEMINI_MODEL_NAME : (apiProvider === 'fireworks' ? FIREWORKS_MODEL_NAME : OPENROUTER_MODEL_NAME)))),
+                artifactDetectionPrompt,
+                artifactDetectionParameters,
+                apiProvider as 'openrouter' | 'openai' | 'ollama' | 'together' | 'gemini' | 'fireworks',
+                artifactDetectionConfig.confidence_threshold,
+                artifactDetectionConfig.processing.max_concurrent_requests,
+                timeBetweenRequests
+              );
+              
+              // Filter attachment images based on artifact detection results
+              attachmentImages = artifactDetectionResults.filteredImagePaths;
+              console.log(`🎯 Attachment images after artifact detection: ${attachmentImages.length} remaining`);
+            }
           }
-          // Extract and process rendered images immediately
+          
+          // Extract rendered images first
+          let renderedImagesForProcessing: string[] = [];
+          const tempRenderedDir = path.join(renderedDir, '_temp');
+          await fs.ensureDir(tempRenderedDir);
+          
+          // Extract rendered images without processing them yet
+          const { findExecutablePath } = await import('./utils');
+          const pdfinfoPath = await findExecutablePath('pdfinfo', 'PDFINFO_PATH');
+          if (!pdfinfoPath) {
+            console.error("❌ The 'pdfinfo' tool was not found. Please install poppler-utils and add it to your PATH or set PDFINFO_PATH environment variable.");
+            process.exit(1);
+          }
+
+          const pdfInfo = await new Promise<string>((resolve, reject) => {
+            const pdfinfo = spawn(pdfinfoPath, [convertedPdf]);
+            let output = '';
+            pdfinfo.stdout.on('data', (data) => { output += data.toString(); });
+            pdfinfo.on('close', (code) => code === 0 ? resolve(output) : reject(new Error(`pdfinfo process exited with code ${code}`)));
+            pdfinfo.on('error', (err) => reject(err));
+          });
+
+          const pageCountMatch = pdfInfo.match(/Pages:\s*(\d+)/);
+          const pageCount = pageCountMatch ? parseInt(pageCountMatch[1], 10) : 0;
+          if (pageCount === 0) {
+            console.warn("⚠️ No pages found in PDF or could not determine page count.");
+            renderedImagesForProcessing = [];
+          } else {
+            const pdftocairoPath = await findExecutablePath('pdftocairo', 'PDFTOCAIRO_PATH');
+            if (!pdftocairoPath) {
+              console.error("❌ The 'pdftocairo' tool was not found. Please install poppler-utils and add it to your PATH or set PDFTOCAIRO_PATH environment variable.");
+              process.exit(1);
+            }
+
+            // Extract all rendered images first
+            for (let pageNum = 1; pageNum <= pageCount; pageNum++) {
+              const tempPngPath = path.join(tempRenderedDir, `${baseFilename}-${pageNum}-temp.png`);
+              await new Promise<void>((resolve, reject) => {
+                const pdftocairo = spawn(pdftocairoPath, ['-png', '-singlefile', '-f', String(pageNum), '-l', String(pageNum), '-r', '200', convertedPdf, path.join(tempRenderedDir, `${baseFilename}-${pageNum}-temp`)]);
+                pdftocairo.on('close', (code) => code === 0 ? resolve() : reject(new Error(`pdftocairo process exited with code ${code}`)));
+                pdftocairo.on('error', (err) => reject(err));
+              });
+
+              const renderedFilename = `${baseFilename}-${pageNum}.webp`;
+              const renderedPath = path.join(renderedDir, renderedFilename);
+              await sharp(tempPngPath).webp({ quality: 80 }).toFile(renderedPath);
+              await fs.remove(tempPngPath);
+              console.log(`  ➡️ Rendered Page ${pageNum} to Image: ${renderedFilename}`);
+              renderedImagesForProcessing.push(renderedPath);
+            }
+          }
+          
+          // Clean up temp directory
+          await fs.remove(tempRenderedDir);
+          
+          // Apply artifact detection to rendered images if enabled
+          if (options.artifactDetection || artifactDetectionConfig.enabled) {
+            console.log('\n🔍 Running artifact detection on rendered images...');
+            const artifactDetectionResults = await detectArtifactsInImages(
+              renderedImagesForProcessing,
+              apiKey,
+              apiProvider === 'openai' ? OPENAI_MODEL_NAME : (apiProvider === 'ollama' ? OLLAMA_MODEL_NAME : (apiProvider === 'together' ? TOGETHER_MODEL_NAME : (apiProvider === 'gemini' ? GEMINI_MODEL_NAME : (apiProvider === 'fireworks' ? FIREWORKS_MODEL_NAME : OPENROUTER_MODEL_NAME)))),
+              artifactDetectionPrompt,
+              artifactDetectionParameters,
+              apiProvider as 'openrouter' | 'openai' | 'ollama' | 'together' | 'gemini' | 'fireworks',
+              artifactDetectionConfig.confidence_threshold,
+              artifactDetectionConfig.processing.max_concurrent_requests,
+              timeBetweenRequests
+            );
+            
+            // Filter rendered images based on artifact detection results
+            renderedImagesForProcessing = artifactDetectionResults.filteredImagePaths;
+            console.log(`🎯 Rendered images after artifact detection: ${renderedImagesForProcessing.length} remaining`);
+          }
+          
+          // Now process the filtered rendered images for text extraction
           processedRenderedImages = await extractRenderedImagesFromPdf(
             convertedPdf,
             renderedDir,
@@ -605,8 +790,103 @@ export async function main(): Promise<void> {
               ? parseInt(options.identicalImageThreshold, 10)
               : config.pdf_processing.identical_image_threshold;
             attachmentImages = await extractMediaImagesFromPdf(updatedFilePath, topicsAttachmentsDir, baseFilename, identicalImageThreshold);
+            
+            // Apply artifact detection to attachment images if enabled
+            if (options.artifactDetection || artifactDetectionConfig.enabled) {
+              console.log('\n🔍 Running artifact detection on attachment images...');
+              const artifactDetectionResults = await detectArtifactsInImages(
+                attachmentImages,
+                apiKey,
+                apiProvider === 'openai' ? OPENAI_MODEL_NAME : (apiProvider === 'ollama' ? OLLAMA_MODEL_NAME : (apiProvider === 'together' ? TOGETHER_MODEL_NAME : (apiProvider === 'gemini' ? GEMINI_MODEL_NAME : (apiProvider === 'fireworks' ? FIREWORKS_MODEL_NAME : OPENROUTER_MODEL_NAME)))),
+                artifactDetectionPrompt,
+                artifactDetectionParameters,
+                apiProvider as 'openrouter' | 'openai' | 'ollama' | 'together' | 'gemini' | 'fireworks',
+                artifactDetectionConfig.confidence_threshold,
+                artifactDetectionConfig.processing.max_concurrent_requests,
+                timeBetweenRequests
+              );
+              
+              // Filter attachment images based on artifact detection results
+              attachmentImages = artifactDetectionResults.filteredImagePaths;
+              console.log(`🎯 Attachment images after artifact detection: ${attachmentImages.length} remaining`);
+            }
           }
-          // Extract and process rendered images immediately
+          
+          // Extract rendered images first
+          let renderedImagesForProcessing: string[] = [];
+          const tempRenderedDir = path.join(renderedDir, '_temp');
+          await fs.ensureDir(tempRenderedDir);
+          
+          // Extract rendered images without processing them yet
+          const { findExecutablePath } = await import('./utils');
+          const pdfinfoPath = await findExecutablePath('pdfinfo', 'PDFINFO_PATH');
+          if (!pdfinfoPath) {
+            console.error("❌ The 'pdfinfo' tool was not found. Please install poppler-utils and add it to your PATH or set PDFINFO_PATH environment variable.");
+            process.exit(1);
+          }
+
+          const pdfInfo = await new Promise<string>((resolve, reject) => {
+            const pdfinfo = spawn(pdfinfoPath, [updatedFilePath]);
+            let output = '';
+            pdfinfo.stdout.on('data', (data) => { output += data.toString(); });
+            pdfinfo.on('close', (code) => code === 0 ? resolve(output) : reject(new Error(`pdfinfo process exited with code ${code}`)));
+            pdfinfo.on('error', (err) => reject(err));
+          });
+
+          const pageCountMatch = pdfInfo.match(/Pages:\s*(\d+)/);
+          const pageCount = pageCountMatch ? parseInt(pageCountMatch[1], 10) : 0;
+          if (pageCount === 0) {
+            console.warn("⚠️ No pages found in PDF or could not determine page count.");
+            renderedImagesForProcessing = [];
+          } else {
+            const pdftocairoPath = await findExecutablePath('pdftocairo', 'PDFTOCAIRO_PATH');
+            if (!pdftocairoPath) {
+              console.error("❌ The 'pdftocairo' tool was not found. Please install poppler-utils and add it to your PATH or set PDFTOCAIRO_PATH environment variable.");
+              process.exit(1);
+            }
+
+            // Extract all rendered images first
+            for (let pageNum = 1; pageNum <= pageCount; pageNum++) {
+              const tempPngPath = path.join(tempRenderedDir, `${baseFilename}-${pageNum}-temp.png`);
+              await new Promise<void>((resolve, reject) => {
+                const pdftocairo = spawn(pdftocairoPath, ['-png', '-singlefile', '-f', String(pageNum), '-l', String(pageNum), '-r', '200', updatedFilePath, path.join(tempRenderedDir, `${baseFilename}-${pageNum}-temp`)]);
+                pdftocairo.on('close', (code) => code === 0 ? resolve() : reject(new Error(`pdftocairo process exited with code ${code}`)));
+                pdftocairo.on('error', (err) => reject(err));
+              });
+
+              const renderedFilename = `${baseFilename}-${pageNum}.webp`;
+              const renderedPath = path.join(renderedDir, renderedFilename);
+              await sharp(tempPngPath).webp({ quality: 80 }).toFile(renderedPath);
+              await fs.remove(tempPngPath);
+              console.log(`  ➡️ Rendered Page ${pageNum} to Image: ${renderedFilename}`);
+              renderedImagesForProcessing.push(renderedPath);
+            }
+          }
+          
+          // Clean up temp directory
+          await fs.remove(tempRenderedDir);
+          
+          // Apply artifact detection to rendered images if enabled
+          if (options.artifactDetection || artifactDetectionConfig.enabled) {
+            console.log('\n🔍 Running artifact detection on rendered images...');
+            const artifactDetectionResults = await detectArtifactsInImages(
+              renderedImagesForProcessing,
+              apiKey,
+              apiProvider === 'openai' ? OPENAI_MODEL_NAME : (apiProvider === 'ollama' ? OLLAMA_MODEL_NAME : (apiProvider === 'together' ? TOGETHER_MODEL_NAME : (apiProvider === 'gemini' ? GEMINI_MODEL_NAME : (apiProvider === 'fireworks' ? FIREWORKS_MODEL_NAME : OPENROUTER_MODEL_NAME)))),
+              artifactDetectionPrompt,
+              artifactDetectionParameters,
+              apiProvider as 'openrouter' | 'openai' | 'ollama' | 'together' | 'gemini' | 'fireworks',
+              artifactDetectionConfig.confidence_threshold,
+              artifactDetectionConfig.processing.max_concurrent_requests,
+              timeBetweenRequests
+            );
+            
+            // Filter rendered images based on artifact detection results
+            renderedImagesForProcessing = artifactDetectionResults.filteredImagePaths;
+            console.log(`🎯 Rendered images after artifact detection: ${renderedImagesForProcessing.length} remaining`);
+          }
+          
+          // Now process the filtered rendered images for text extraction
           processedRenderedImages = await extractRenderedImagesFromPdf(
             updatedFilePath,
             renderedDir,
@@ -1167,6 +1447,19 @@ export async function main(): Promise<void> {
               useAiForHeadings: true, // Default to true for CLI
               identicalImageThreshold: options.identicalImageThreshold ? parseInt(options.identicalImageThreshold, 10) : 3,
               verboseOutput: verbose,
+              artifactDetection: {
+                enabled: options.artifactDetection || false,
+                confidenceThreshold: artifactDetectionConfig.confidence_threshold,
+                maxConcurrentRequests: artifactDetectionConfig.processing.max_concurrent_requests,
+                requestTimeout: artifactDetectionConfig.processing.request_timeout,
+                retryFailedRequests: artifactDetectionConfig.processing.retry_failed_requests,
+                maxRetryAttempts: artifactDetectionConfig.processing.max_retry_attempts,
+                retryDelay: artifactDetectionConfig.processing.retry_delay,
+                logIndividualResults: artifactDetectionConfig.logging.log_individual_results,
+                logSummaryStatistics: artifactDetectionConfig.logging.log_summary_statistics,
+                saveDetailedResults: artifactDetectionConfig.logging.save_detailed_results,
+                resultsFilePath: artifactDetectionConfig.logging.results_file_path
+              },
               openrouterModel: { name: OPENROUTER_MODEL_NAME },
               openaiModel: { name: OPENAI_MODEL_NAME },
               ollamaModel: { name: OLLAMA_MODEL_NAME },

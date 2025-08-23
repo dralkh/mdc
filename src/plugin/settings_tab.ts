@@ -408,7 +408,142 @@ export class MDCSettingTab extends PluginSettingTab {
     		await this.plugin.saveSettings();
     	}
     }));
-    }
+
+  // Artifact Detection Settings
+  new Setting(container)
+   .setName('AI-Powered Artifact Detection')
+   .setHeading();
+
+  new Setting(container)
+   .setName('Enable Artifact Detection')
+   .setDesc('Use AI to detect and filter out low-value images (artifacts) before text extraction')
+   .addToggle(toggle => toggle
+    .setValue(this.plugin.settings.artifactDetection.enabled)
+    .onChange(async (value) => {
+    	this.plugin.settings.artifactDetection.enabled = value;
+    	await this.plugin.saveSettings();
+    }));
+
+  new Setting(container)
+   .setName('Confidence Threshold')
+   .setDesc('Minimum confidence score (0.0-1.0) to classify an image as an artifact')
+   .addSlider(slider => slider
+    .setLimits(0, 1, 0.05)
+    .setValue(this.plugin.settings.artifactDetection.confidenceThreshold)
+    .setDynamicTooltip()
+    .onChange(async (value) => {
+    	this.plugin.settings.artifactDetection.confidenceThreshold = value;
+    	await this.plugin.saveSettings();
+    }));
+
+  new Setting(container)
+   .setName('Max Concurrent Requests')
+   .setDesc('Maximum number of concurrent artifact detection requests')
+   .addSlider(slider => slider
+    .setLimits(1, 10, 1)
+    .setValue(this.plugin.settings.artifactDetection.maxConcurrentRequests)
+    .setDynamicTooltip()
+    .onChange(async (value) => {
+    	this.plugin.settings.artifactDetection.maxConcurrentRequests = value;
+    	await this.plugin.saveSettings();
+    }));
+
+  new Setting(container)
+   .setName('Request Timeout (ms)')
+   .setDesc('Timeout for artifact detection requests in milliseconds')
+   .addText(text => text
+    .setPlaceholder('30000')
+    .setValue(String(this.plugin.settings.artifactDetection.requestTimeout))
+    .onChange(async (value) => {
+    	const timeout = parseInt(value);
+    	if (!isNaN(timeout) && timeout > 0) {
+    		this.plugin.settings.artifactDetection.requestTimeout = timeout;
+    		await this.plugin.saveSettings();
+    	}
+    }));
+
+  new Setting(container)
+   .setName('Retry Failed Requests')
+   .setDesc('Automatically retry failed artifact detection requests')
+   .addToggle(toggle => toggle
+    .setValue(this.plugin.settings.artifactDetection.retryFailedRequests)
+    .onChange(async (value) => {
+    	this.plugin.settings.artifactDetection.retryFailedRequests = value;
+    	await this.plugin.saveSettings();
+    }));
+
+  new Setting(container)
+   .setName('Max Retry Attempts')
+   .setDesc('Maximum number of retry attempts for failed requests')
+   .addSlider(slider => slider
+    .setLimits(1, 5, 1)
+    .setValue(this.plugin.settings.artifactDetection.maxRetryAttempts)
+    .setDynamicTooltip()
+    .onChange(async (value) => {
+    	this.plugin.settings.artifactDetection.maxRetryAttempts = value;
+    	await this.plugin.saveSettings();
+    }));
+
+  new Setting(container)
+   .setName('Retry Delay (ms)')
+   .setDesc('Delay between retry attempts in milliseconds')
+   .addText(text => text
+    .setPlaceholder('1000')
+    .setValue(String(this.plugin.settings.artifactDetection.retryDelay))
+    .onChange(async (value) => {
+    	const delay = parseInt(value);
+    	if (!isNaN(delay) && delay >= 0) {
+    		this.plugin.settings.artifactDetection.retryDelay = delay;
+    		await this.plugin.saveSettings();
+    	}
+    }));
+
+  // Logging Settings
+  new Setting(container)
+   .setName('Logging Settings')
+   .setHeading();
+
+  new Setting(container)
+   .setName('Log Individual Results')
+   .setDesc('Log detailed results for each image analyzed')
+   .addToggle(toggle => toggle
+    .setValue(this.plugin.settings.artifactDetection.logIndividualResults)
+    .onChange(async (value) => {
+    	this.plugin.settings.artifactDetection.logIndividualResults = value;
+    	await this.plugin.saveSettings();
+    }));
+
+  new Setting(container)
+   .setName('Log Summary Statistics')
+   .setDesc('Log summary statistics after processing all images')
+   .addToggle(toggle => toggle
+    .setValue(this.plugin.settings.artifactDetection.logSummaryStatistics)
+    .onChange(async (value) => {
+    	this.plugin.settings.artifactDetection.logSummaryStatistics = value;
+    	await this.plugin.saveSettings();
+    }));
+
+  new Setting(container)
+   .setName('Save Detailed Results')
+   .setDesc('Save detailed artifact detection results to a JSON file')
+   .addToggle(toggle => toggle
+    .setValue(this.plugin.settings.artifactDetection.saveDetailedResults)
+    .onChange(async (value) => {
+    	this.plugin.settings.artifactDetection.saveDetailedResults = value;
+    	await this.plugin.saveSettings();
+    }));
+
+  new Setting(container)
+   .setName('Results File Path')
+   .setDesc('Path where detailed results will be saved')
+   .addText(text => text
+    .setPlaceholder('./artifact_detection_results.json')
+    .setValue(this.plugin.settings.artifactDetection.resultsFilePath)
+    .onChange(async (value) => {
+    	this.plugin.settings.artifactDetection.resultsFilePath = value;
+    	await this.plugin.saveSettings();
+    }));
+   }
 
     renderPromptsTab(container: HTMLElement) {
         container.empty();

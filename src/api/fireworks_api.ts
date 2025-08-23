@@ -1,5 +1,9 @@
 import { OpenAI } from 'openai';
 import { retryWithBackoff } from '../utils';
+import {
+  ArtifactDetectionResponse,
+  parseArtifactDetectionResponse
+} from '../types/artifact_detection';
 
 interface RateLimitInfo {
   requests: number;
@@ -303,6 +307,93 @@ ${JSON.stringify(headings, null, 2)}
   } catch (e) {
     const error = e instanceof Error ? e : new Error(String(e));
     console.error(`⚠️ Error communicating with Fireworks API for heading restructuring: ${error.message}`);
+    return null;
+  }
+}
+
+/**
+ * Sends an image to the Fireworks API to detect if it's an artifact or valuable content.
+ * Returns structured JSON response with artifact detection results.
+ */
+export async function detectArtifactsInImage(
+  dataUrl: string,
+  apiKey: string,
+  modelName: string,
+  prompt: string,
+  parameters: Record<string, any>
+): Promise<ArtifactDetectionResponse | null> {
+  const client = new OpenAI({ apiKey, baseURL: "https://api.fireworks.ai/inference/v1" });
+  
+  try {
+    // Filter out incompatible parameters
+    const filteredParameters = filterIncompatibleParameters(parameters);
+    
+    // Define API request function for retry
+    const makeApiRequest = async () => {
+      return await client.chat.completions.create({
+        model: modelName,
+        messages: [
+          {
+            role: "user",
+            content: [
+              {
+                type: "text",
+                text: prompt
+              },
+              {
+                type: "image_url",
+                image_url: {
+                  url: dataUrl
+                }
+              }
+            ]
+          }
+        ],
+        ...filteredParameters
+      });
+    };
+    
+    // Make the API call with retry
+    const response = await retryWithBackoff(makeApiRequest);
+    if (response === null) {
+      return null;
+    }
+    
+    if (response.choices && response.choices[0] && response.choices[0].message) {
+      try {
+        const content = response.choices[0].message.content?.trim();
+        if (!content) {
+          console.warn('⚠️ No content received from Fireworks API for artifact detection');
+          return null;
+        }
+        
+        // Parse the JSON response
+        const parsedResponse = parseArtifactDetectionResponse(content);
+        if (!parsedResponse) {
+          console.warn('⚠️ Failed to parse artifact detection response from Fireworks API');
+          console.warn('Raw response:', content);
+          return null;
+        }
+        
+        const confidence = parsedResponse.confidence !== undefined ? parsedResponse.confidence.toFixed(2) : 'undefined';
+        console.log(`  ✅ Artifact detection completed: ${parsedResponse.is_artifact ? 'Artifact' : 'Valuable'} (${confidence} confidence)`);
+        if (parsedResponse.content_analysis?.content_description) {
+          console.log(`  📝 Content: ${parsedResponse.content_analysis.content_description}`);
+        }
+        
+        return parsedResponse;
+      } catch (e) {
+        const error = e instanceof Error ? e : new Error(String(e));
+        console.error(`⚠️ Unexpected response format from Fireworks API for artifact detection: ${error.message}`);
+        return null;
+      }
+    } else {
+      console.error(`⚠️ Artifact detection API request failed: No valid response structure`);
+      return null;
+    }
+  } catch (e) {
+    const error = e instanceof Error ? e : new Error(String(e));
+    console.error(`⚠️ Error communicating with Fireworks API for artifact detection: ${error.message}`);
     return null;
   }
 }

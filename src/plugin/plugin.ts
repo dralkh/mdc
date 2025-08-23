@@ -280,6 +280,11 @@ export default class MDCIntegrationPlugin extends Plugin {
 			// Add requests per minute
 			command += ` --requests-per-minute ${this.settings.requestsPerMinute}`;
 
+			// Add artifact detection if enabled
+			if (this.settings.artifactDetection.enabled) {
+				command += ' --artifact-detection';
+			}
+
 			// The --config flag is no longer added here.
 			// The CLI will use its default config loading logic (which expects config.yaml in the plugin root).
 			// For overriding prompts, a different mechanism (like a temporary config file) will be implemented later if needed.
@@ -327,6 +332,19 @@ export default class MDCIntegrationPlugin extends Plugin {
 
 			// Pass prompt settings as an environment variable
 			env.MDC_PROMPTS_OVERRIDE = JSON.stringify(this.settings.prompts);
+			
+			// Pass artifact detection settings as environment variables
+			env.MDC_ARTIFACT_DETECTION_ENABLED = this.settings.artifactDetection.enabled.toString();
+			env.MDC_ARTIFACT_DETECTION_CONFIDENCE_THRESHOLD = this.settings.artifactDetection.confidenceThreshold.toString();
+			env.MDC_ARTIFACT_DETECTION_MAX_CONCURRENT_REQUESTS = this.settings.artifactDetection.maxConcurrentRequests.toString();
+			env.MDC_ARTIFACT_DETECTION_REQUEST_TIMEOUT = this.settings.artifactDetection.requestTimeout.toString();
+			env.MDC_ARTIFACT_DETECTION_RETRY_FAILED_REQUESTS = this.settings.artifactDetection.retryFailedRequests.toString();
+			env.MDC_ARTIFACT_DETECTION_MAX_RETRY_ATTEMPTS = this.settings.artifactDetection.maxRetryAttempts.toString();
+			env.MDC_ARTIFACT_DETECTION_RETRY_DELAY = this.settings.artifactDetection.retryDelay.toString();
+			env.MDC_ARTIFACT_DETECTION_LOG_INDIVIDUAL_RESULTS = this.settings.artifactDetection.logIndividualResults.toString();
+			env.MDC_ARTIFACT_DETECTION_LOG_SUMMARY_STATISTICS = this.settings.artifactDetection.logSummaryStatistics.toString();
+			env.MDC_ARTIFACT_DETECTION_SAVE_DETAILED_RESULTS = this.settings.artifactDetection.saveDetailedResults.toString();
+			env.MDC_ARTIFACT_DETECTION_RESULTS_FILE_PATH = this.settings.artifactDetection.resultsFilePath;
 
 			// Execute the command with the environment variables and set working directory
 			// Set working directory to the plugin directory so config.yaml can be found

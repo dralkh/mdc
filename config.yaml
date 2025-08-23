@@ -159,3 +159,71 @@ pdf_processing:
 
 processing_settings:
   verboseOutput: false # Controls creation of intermediate files like _compressed.pdf and process_output directory
+
+artifact_detection:
+  enabled: true
+  confidence_threshold: 0.7
+  prompt: |
+    You are an AI-powered artifact detection system. Analyze the provided image and determine if it's an artifact (low-value content) or valuable content that should be processed further.
+    
+    IMPORTANT: You must respond with ONLY a valid JSON object. No additional text, explanations, or formatting.
+    
+    JSON Format:
+    {
+      "is_artifact": true/false,
+      "confidence": 0.0-1.0,
+      "reason": "Brief explanation",
+      "artifact_type": "solid_color|duplicate|low_quality|chart|diagram|logo|text_content|screenshot|icon|other",
+      "recommendation": "keep|discard",
+      "content_analysis": {
+        "has_text": true/false,
+        "has_meaningful_content": true/false,
+        "estimated_quality": "low|medium|high",
+        "content_description": "Brief description"
+      }
+    }
+    
+    Classification Rules:
+    - SOLID_COLOR: Pure solid color backgrounds with no content -> ARTIFACT
+    - DUPLICATE: Identical or very similar images -> ARTIFACT
+    - LOW_QUALITY: Blurry, pixelated, poor quality -> ARTIFACT
+    - CHART: Graphs, plots, data visualizations -> VALUABLE
+    - DIAGRAM: Technical drawings, flowcharts, schematics -> VALUABLE
+    - LOGO: Company logos, brand symbols -> ARTIFACT
+    - TEXT_CONTENT: Images with readable text -> VALUABLE
+    - SCREENSHOT: Screen captures with information -> VALUABLE
+    - ICON: Small symbolic images, UI elements -> ARTIFACT
+    - OTHER: Any other type -> USE JUDGMENT
+    
+    Decision Process:
+    1. Charts, diagrams, meaningful text, educational screenshots -> KEEP (not artifact)
+    2. Solid colors, backgrounds, simple logos, decorations -> DISCARD (artifact)
+    3. When uncertain -> KEEP (better safe than sorry)
+    
+    Examples:
+    {"is_artifact": true, "confidence": 0.95, "reason": "Solid red background", "artifact_type": "solid_color", "recommendation": "discard", "content_analysis": {"has_text": false, "has_meaningful_content": false, "estimated_quality": "low", "content_description": "Solid red background"}}
+    {"is_artifact": false, "confidence": 0.9, "reason": "Bar chart with data", "artifact_type": "chart", "recommendation": "keep", "content_analysis": {"has_text": true, "has_meaningful_content": true, "estimated_quality": "high", "content_description": "Data visualization"}}
+    {"is_artifact": true, "confidence": 0.7, "reason": "Company logo", "artifact_type": "logo", "recommendation": "discard", "content_analysis": {"has_text": false, "has_meaningful_content": false, "estimated_quality": "medium", "content_description": "Brand logo"}}
+    {"is_artifact": false, "confidence": 0.8, "reason": "Text screenshot", "artifact_type": "screenshot", "recommendation": "keep", "content_analysis": {"has_text": true, "has_meaningful_content": true, "estimated_quality": "high", "content_description": "Interface with text"}}
+    
+    YOUR RESPONSE MUST BE VALID JSON ONLY. START WITH { AND END WITH }.
+  parameters:
+    temperature: 0.1
+    top_p: 0.95
+    frequency_penalty: 0
+    presence_penalty: 0
+    repetition_penalty: 1
+    top_k: 0
+    max_tokens: 500
+  processing:
+    max_concurrent_requests: 4
+    request_timeout: 30000
+    retry_failed_requests: true
+    max_retry_attempts: 3
+    retry_delay: 1000
+  logging:
+    enabled: true
+    log_individual_results: true
+    log_summary_statistics: true
+    save_detailed_results: false
+    results_file_path: "./artifact_detection_results.json"

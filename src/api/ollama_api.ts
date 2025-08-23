@@ -1,6 +1,10 @@
 import axios from 'axios';
 import * as fs from 'fs-extra';
 import { retryWithBackoff, prepareImageForLlava } from '../utils';
+import {
+  ArtifactDetectionResponse,
+  parseArtifactDetectionResponse
+} from '../types/artifact_detection';
 
 interface RateLimitInfo {
   requests: number;
@@ -353,6 +357,88 @@ export async function extractTocFromMarkdown(
   } catch (e) {
     const error = e instanceof Error ? e : new Error(String(e));
     console.error(`⚠️ Error communicating with Ollama API for TOC extraction: ${error.message}`);
+    return null;
+  }
+}
+
+/**
+ * Sends an image to the Ollama API to detect if it's an artifact or valuable content.
+ * Returns structured JSON response with artifact detection results.
+ */
+export async function detectArtifactsInImage(
+  dataUrl: string,
+  apiKey: string,
+  modelName: string,
+  prompt: string,
+  parameters: Record<string, any>
+): Promise<ArtifactDetectionResponse | null> {
+  const headers = {
+    "Content-Type": "application/json",
+  };
+  
+  // For Ollama, we need to convert the data URL to base64 image data
+  const base64Data = dataUrl.split(',')[1];
+  
+  const payload = {
+    model: modelName,
+    prompt: prompt,
+    images: [base64Data],
+    stream: false,
+    ...parameters
+  };
+
+  // Define API request function for retry
+  const makeApiRequest = async () => {
+    const resp = await axios.post(
+      "http://localhost:11434/api/generate",
+      payload,
+      { headers }
+    );
+    return resp;
+  };
+
+  try {
+    // Make the API call with retry
+    const response = await retryWithBackoff(makeApiRequest);
+    if (response === null) {
+      return null;
+    }
+    
+    if (response.status === 200) {
+      try {
+        const content = response.data.response.trim();
+        if (!content) {
+          console.warn('⚠️ No content received from Ollama API for artifact detection');
+          return null;
+        }
+        
+        // Parse the JSON response
+        const parsedResponse = parseArtifactDetectionResponse(content);
+        if (!parsedResponse) {
+          console.warn('⚠️ Failed to parse artifact detection response from Ollama API');
+          console.warn('Raw response:', content);
+          return null;
+        }
+        
+        const confidence = parsedResponse.confidence !== undefined ? parsedResponse.confidence.toFixed(2) : 'undefined';
+        console.log(`  ✅ Artifact detection completed: ${parsedResponse.is_artifact ? 'Artifact' : 'Valuable'} (${confidence} confidence)`);
+        if (parsedResponse.content_analysis?.content_description) {
+          console.log(`  📝 Content: ${parsedResponse.content_analysis.content_description}`);
+        }
+        
+        return parsedResponse;
+      } catch (e) {
+        const error = e instanceof Error ? e : new Error(String(e));
+        console.error(`⚠️ Unexpected response format from Ollama API for artifact detection: ${error.message}`);
+        return null;
+      }
+    } else {
+      console.error(`⚠️ Artifact detection API request failed with status code ${response.status}: ${JSON.stringify(response.data)}`);
+      return null;
+    }
+  } catch (e) {
+    const error = e instanceof Error ? e : new Error(String(e));
+    console.error(`⚠️ Error communicating with Ollama API for artifact detection: ${error.message}`);
     return null;
   }
 }

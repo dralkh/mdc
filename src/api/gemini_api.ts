@@ -1,6 +1,10 @@
 import { GoogleGenAI, HarmCategory, HarmBlockThreshold, GenerationConfig } from "@google/genai";
 import * as fs from 'fs'; // Node.js file system module, if needed for direct file operations
 import { retryWithBackoff } from '../utils'; // Assuming utils.ts is in the same directory or adjust path
+import {
+  ArtifactDetectionResponse,
+  parseArtifactDetectionResponse
+} from '../types/artifact_detection';
 
 // Interface for rate limit information, similar to other API modules
 interface RateLimitInfo {
@@ -316,6 +320,80 @@ ${JSON.stringify(headings, null, 2)}
   } catch (e) {
     const error = e instanceof Error ? e : new Error(String(e));
     console.error(`⚠️ Error communicating with Gemini API for heading restructuring: ${error.message}`);
+    return null;
+  }
+}
+
+/**
+ * Sends an image to the Gemini API to detect if it's an artifact or valuable content.
+ * Returns structured JSON response with artifact detection results.
+ */
+export async function detectArtifactsInImageGemini(
+  dataUrl: string,
+  apiKey: string,
+  modelName: string,
+  prompt: string,
+  parameters: Record<string, any>
+): Promise<ArtifactDetectionResponse | null> {
+  const parsedData = parseDataUrl(dataUrl);
+  if (!parsedData) {
+    return null;
+  }
+  const { mimeType, base64Data } = parsedData;
+
+  const genAI = new GoogleGenAI({ apiKey });
+
+  const imagePart = {
+    inlineData: {
+      data: base64Data,
+      mimeType: mimeType,
+    },
+  };
+
+  const requestPayloadContents = [{ role: "user", parts: [imagePart, { text: prompt }] }];
+
+  const apiCall = async () => {
+    const generateContentResponse = await genAI.models.generateContent({
+        model: modelName,
+        contents: requestPayloadContents,
+    });
+    
+    if (generateContentResponse.promptFeedback?.blockReason) {
+      console.error(`❌ Gemini API blocked the prompt for artifact detection: ${generateContentResponse.promptFeedback.blockReason}`);
+      if (generateContentResponse.promptFeedback.blockReasonMessage) {
+        console.error(`   Reason message: ${generateContentResponse.promptFeedback.blockReasonMessage}`);
+      }
+      return null;
+    }
+    return generateContentResponse.text;
+  };
+
+  try {
+    const response = await retryWithBackoff(apiCall);
+    if (response) {
+      console.log(`✅ Artifact detection completed using Gemini model ${modelName}.`);
+      
+      // Parse the JSON response
+      const parsedResponse = parseArtifactDetectionResponse(response);
+      if (!parsedResponse) {
+        console.warn('⚠️ Failed to parse artifact detection response from Gemini API');
+        console.warn('Raw response:', response);
+        return null;
+      }
+      
+      const confidence = parsedResponse.confidence !== undefined ? parsedResponse.confidence.toFixed(2) : 'undefined';
+      console.log(`  ✅ Artifact detection completed: ${parsedResponse.is_artifact ? 'Artifact' : 'Valuable'} (${confidence} confidence)`);
+      if (parsedResponse.content_analysis?.content_description) {
+        console.log(`  📝 Content: ${parsedResponse.content_analysis.content_description}`);
+      }
+      
+      return parsedResponse;
+    }
+    console.warn(`⚠️ Failed to detect artifacts using Gemini model ${modelName} after retries.`);
+    return null;
+  } catch (e) {
+    const error = e instanceof Error ? e : new Error(String(e));
+    console.error(`⚠️ Error communicating with Gemini API for artifact detection: ${error.message}`);
     return null;
   }
 }

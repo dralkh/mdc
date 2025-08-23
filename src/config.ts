@@ -50,6 +50,34 @@ export interface Config {
   processing_settings: { // Added for verboseOutput
     verboseOutput: boolean;
   };
+  artifact_detection?: { // Added for artifact detection - optional for backward compatibility
+    enabled: boolean;
+    confidence_threshold: number;
+    prompt: string;
+    parameters: {
+      temperature: number;
+      top_p: number;
+      frequency_penalty: number;
+      presence_penalty: number;
+      repetition_penalty: number;
+      top_k: number;
+      max_tokens: number;
+    };
+    processing: {
+      max_concurrent_requests: number;
+      request_timeout: number;
+      retry_failed_requests: boolean;
+      max_retry_attempts: number;
+      retry_delay: number;
+    };
+    logging: {
+      enabled: boolean;
+      log_individual_results: boolean;
+      log_summary_statistics: boolean;
+      save_detailed_results: boolean;
+      results_file_path: string;
+    };
+  };
 }
 
 export function loadConfig(customPath?: string): Config {
