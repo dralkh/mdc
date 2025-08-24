@@ -50,6 +50,7 @@ export interface MDCPluginSettings {
 	// Processing options
 	extractAttachments: boolean;
 	generateToc: boolean;
+	tocHeadingLevels: number; // Controls which heading levels appear in TOC (1-6)
 	tokenLimit: number;
 	updateHeadings: boolean;
 	useAiForHeadings: boolean; // New setting for AI-powered heading restructuring
@@ -123,6 +124,7 @@ export const DEFAULT_SETTINGS: MDCPluginSettings = {
 	// Processing options
 	extractAttachments: true,
 	generateToc: true,
+	tocHeadingLevels: 6, // Default to show all heading levels (1-6)
 	tokenLimit: 4000,
 	updateHeadings: true,
 	useAiForHeadings: true, // Default for AI-powered heading restructuring

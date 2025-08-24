@@ -265,7 +265,7 @@ export default class MDCIntegrationPlugin extends Plugin {
 			}
 
 			if (this.settings.generateToc) {
-				command += ' --table';
+				command += ` --table ${this.settings.tocHeadingLevels}`;
 			}
 
 			if (this.settings.updateHeadings) {

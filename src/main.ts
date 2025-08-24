@@ -1442,6 +1442,7 @@ export async function main(): Promise<void> {
               requestsPerMinute: options.requestsPerMinute ? parseInt(options.requestsPerMinute, 10) : 60,
               extractAttachments: options.ma || false,
               generateToc: options.table || false,
+              tocHeadingLevels: 6, // Default to show all heading levels (1-6)
               tokenLimit: options.token ? parseInt(options.token, 10) : 4000,
               updateHeadings: options.headings || false,
               useAiForHeadings: true, // Default to true for CLI

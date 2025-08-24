@@ -362,6 +362,21 @@ export class MDCSettingTab extends PluginSettingTab {
     	await this.plugin.saveSettings();
     }));
 
+  // Only show heading levels slider if TOC generation is enabled
+  if (this.plugin.settings.generateToc) {
+    new Setting(container)
+     .setName('TOC Heading Levels')
+     .setDesc('Control which heading levels appear in the table of contents (1-6, where 1 = #, 2 = ##, etc.)')
+     .addSlider(slider => slider
+      .setLimits(1, 6, 1)
+      .setValue(this.plugin.settings.tocHeadingLevels)
+      .setDynamicTooltip()
+      .onChange(async (value) => {
+        this.plugin.settings.tocHeadingLevels = value;
+        await this.plugin.saveSettings();
+      }));
+  }
+
   new Setting(container)
    .setName('Token Limit')
    .setDesc('Maximum tokens per chunk for processing (0 for no limit)')
