@@ -38,7 +38,7 @@ export async function authenticateGeminiApi(apiKey: string): Promise<[boolean, R
     // To simulate an auth check, we can try a minimal generateContent call.
     // Using "gemini-1.5-flash-latest" as it's a generally available model suitable for generateContent.
     await genAI.models.generateContent({
-      model: "gemini-2.5-flash-preview-04-17",
+      model: "gemini-2.5-flash",
       contents: [{ role: "user", parts: [{text: "test"}] }]
       // Removed generationConfig for simplicity in auth call
     });

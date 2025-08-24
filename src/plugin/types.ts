@@ -149,7 +149,7 @@ export const DEFAULT_SETTINGS: MDCPluginSettings = {
 	openaiModel: { name: "gpt-4o-mini" },
 	ollamaModel: { name: "gemma3:12b" },
 	togetherModel: { name: "meta-llama/Llama-4-Maverick-17B-128E-Instruct-FP8" }, // Default Together AI model
-	geminiModel: { name: "gemini-2.5-flash-preview-04-17" }, // Default Gemini model
+	geminiModel: { name: "gemini-2.5-flash" }, // Default Gemini model
 	fireworksModel: { name: "accounts/fireworks/models/qwen2p5-vl-32b-instruct" }, // Default Fireworks model
 
 	customOpenAIProviders: [],

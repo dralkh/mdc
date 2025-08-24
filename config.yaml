@@ -11,7 +11,7 @@ together_model:
   name: "meta-llama/Llama-4-Maverick-17B-128E-Instruct-FP8" # Default Together AI model
 
 gemini_model:
-  name: "gemini-2.5-flash-preview-04-17" # Default Gemini model, vision capable
+  name: "gemini-2.5-flash" # Default Gemini model, vision capable
 
 fireworks_model:
   name: "accounts/fireworks/models/qwen2p5-vl-32b-instruct" # Default Fireworks model, vision capable
