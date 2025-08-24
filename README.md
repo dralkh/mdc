@@ -8,7 +8,7 @@ MDC (Markdown Document Converter) is a powerful AI-driven tool that extracts con
 
 
 ## Preview
-<img width="2117" height="1554" alt="preview" src="https://github.com/user-attachments/assets/6c0e3291-db74-47ef-9230-fa8dec275280" />
+<img width="1158" height="850" alt="image" src="https://github.com/user-attachments/assets/535998ce-745c-4001-9633-a58a9eb776ec" />
 
 
 
